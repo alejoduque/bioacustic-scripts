@@ -1,0 +1,251 @@
+#!/bin/bash
+
+# Simple HTML gallery generator
+# Scans current directory for thumbnail files and creates a 4x4 grid
+# No complex date parsing - just uses what's actually there
+
+echo "Scanning for thumbnail files..."
+
+# Find all thumbnail files in current directory
+thumbnails=($(ls *-thumbnail.png 2>/dev/null | sort))
+
+if [ ${#thumbnails[@]} -eq 0 ]; then
+    echo "No thumbnail files found (*-thumbnail.png)"
+    exit 1
+fi
+
+echo "Found ${#thumbnails[@]} thumbnail files"
+
+# Delete old index.html if it exists
+[ -f "index.html" ] && rm index.html
+
+# Start HTML document
+cat > index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioMoth Spectrogram Gallery</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .cell {
+            aspect-ratio: 1;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        
+        .cell:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+        
+        .cell-link {
+            display: block;
+            width: 100%;
+            height: 100%;
+            text-decoration: none;
+            position: relative;
+        }
+        
+        .thumbnail {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .filename {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            color: white;
+            padding: 15px 10px 8px;
+            font-size: 12px;
+            text-align: center;
+        }
+        
+        /* Lightbox styles */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .lightbox.active {
+            display: flex;
+        }
+        
+        .lightbox-content {
+            max-width: 90%;
+            max-height: 90%;
+            position: relative;
+        }
+        
+        .lightbox video {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        .lightbox-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        
+        .lightbox-caption {
+            color: white;
+            text-align: center;
+            margin-top: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>AudioMoth Spectrogram Gallery</h1>
+        <p>Click any thumbnail to view the spectrogram video</p>
+    </div>
+    
+    <div class="grid">
+EOF
+
+# Generate grid cells - one for each thumbnail found
+for thumbnail in "${thumbnails[@]}"; do
+    
+    # Extract base name (remove -thumbnail.png)
+    basename=${thumbnail%-thumbnail.png}
+    
+    # Check if corresponding video exists
+    video_file="${basename}.mp4"
+    
+    echo "        <div class=\"cell\">" >> index.html
+    
+    if [ -f "$video_file" ]; then
+        echo "            <a href=\"#\" class=\"cell-link\" onclick=\"openLightbox('$video_file', '$basename')\">" >> index.html
+    else
+        echo "            <div class=\"cell-link\">" >> index.html
+    fi
+    
+    echo "                <img src=\"$thumbnail\" alt=\"$basename\" class=\"thumbnail\">" >> index.html
+    echo "                <div class=\"filename\">$basename</div>" >> index.html
+    
+    if [ -f "$video_file" ]; then
+        echo "            </a>" >> index.html
+    else
+        echo "            </div>" >> index.html
+    fi
+    
+    echo "        </div>" >> index.html
+done
+
+# Close HTML and add JavaScript
+cat >> index.html << 'EOF'
+    </div>
+    
+    <!-- Lightbox -->
+    <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+            <video id="lightbox-video" controls>
+                <source id="lightbox-source" src="" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+            <div class="lightbox-caption" id="lightbox-caption"></div>
+        </div>
+    </div>
+    
+    <script>
+        function openLightbox(videoSrc, caption) {
+            const lightbox = document.getElementById('lightbox');
+            const video = document.getElementById('lightbox-video');
+            const source = document.getElementById('lightbox-source');
+            const captionEl = document.getElementById('lightbox-caption');
+            
+            source.src = videoSrc;
+            video.load();
+            captionEl.textContent = caption;
+            lightbox.classList.add('active');
+            
+            // Pause video when lightbox closes
+            lightbox.addEventListener('click', function() {
+                video.pause();
+            });
+        }
+        
+        function closeLightbox() {
+            const lightbox = document.getElementById('lightbox');
+            const video = document.getElementById('lightbox-video');
+            
+            lightbox.classList.remove('active');
+            video.pause();
+            video.currentTime = 0;
+        }
+        
+        // Close lightbox with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeLightbox();
+            }
+        });
+    </script>
+</body>
+</html>
+EOF
+
+echo "Generated index.html with all ${#thumbnails[@]} thumbnails in a responsive grid"
