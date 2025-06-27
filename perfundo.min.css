@@ -1,0 +1,117 @@
+/*
+# Minimal lightbox CSS for video display
+# Based on Perfundo library but simplified and optimized
+# Original: https://github.com/maoberlehner/perfundo
+*/
+
+/* Lightbox overlay */
+.perfundo__overlay {
+  display: flex;
+  visibility: hidden;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 999;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.perfundo__overlay:target {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Content container */
+.perfundo__content {
+  max-width: 90vw;
+  max-height: 90vh;
+  position: relative;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Video styling */
+.perfundo__content video {
+  display: block;
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Close button */
+.perfundo__close {
+  position: absolute;
+  top: -50px;
+  right: 0;
+  color: white;
+  font-size: 2rem;
+  text-decoration: none;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  transition: background 0.2s ease;
+}
+
+.perfundo__close:hover {
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+}
+
+/* Video caption */
+.video-caption {
+  color: white;
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 1rem;
+  opacity: 0.9;
+}
+
+/* Untarget div (invisible) */
+.perfundo__untarget {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .perfundo__content {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+  
+  .perfundo__content video {
+    max-height: 70vh;
+  }
+  
+  .perfundo__close {
+    top: -40px;
+    font-size: 1.5rem;
+    width: 35px;
+    height: 35px;
+  }
+  
+  .video-caption {
+    font-size: 0.9rem;
+  }
+}

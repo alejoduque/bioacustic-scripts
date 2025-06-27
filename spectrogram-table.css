@@ -1,0 +1,235 @@
+/*
+# Copyright (c) 2020, lowkey digital studio
+# Author: Nathan Wolek
+# Usage of this file and its contents is governed by the MIT License
+# 
+# IMPROVED VERSION - Minimalistic design with larger thumbnails and better functionality
+*/
+
+/* Reset and base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  color: #333;
+  background: #f8f9fa;
+}
+
+/* Header section */
+.intro {
+  max-width: 1400px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  text-align: center;
+}
+
+.intro h1 {
+  font-size: 2.5rem;
+  font-weight: 300;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+}
+
+.intro p {
+  font-size: 1.1rem;
+  color: #666;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Table container */
+.table-scroll {
+  position: relative;
+  width: 100%;
+  max-width: 1400px;
+  margin: 2rem auto;
+  overflow: auto;
+  height: 80vh;
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.table-scroll table {
+  width: 100%;
+  min-width: 1400px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Table headers */
+.table-scroll th {
+  padding: 1rem;
+  background: #2c3e50;
+  color: white;
+  font-weight: 500;
+  text-align: center;
+  border-right: 1px solid #34495e;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.table-scroll th:last-child {
+  border-right: none;
+}
+
+/* Time column (first column) */
+th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 11;
+  background: #34495e;
+  min-width: 120px;
+  border-right: 2px solid #2c3e50;
+}
+
+/* Hour markers */
+.table-scroll th.start-of-hour {
+  background: #3498db;
+}
+
+/* Table cells */
+.table-scroll td {
+  padding: 0.5rem;
+  border-right: 1px solid #e1e8ed;
+  border-bottom: 1px solid #e1e8ed;
+  background: white;
+  vertical-align: middle;
+  text-align: center;
+  min-width: 200px;
+  height: 180px;
+}
+
+.table-scroll td:last-child {
+  border-right: none;
+}
+
+/* Sunday column highlighting */
+.table-scroll td.start-of-week {
+  background: #fff5f5;
+  border-left: 3px solid #e74c3c;
+}
+
+/* Thumbnail container */
+.thumbnail-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  height: 100%;
+  justify-content: center;
+}
+
+/* Thumbnail images */
+.thumbnail-image {
+  width: 160px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 2px solid #e1e8ed;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.lightbox-link:hover .thumbnail-image {
+  border-color: #3498db;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+/* Filename labels */
+.filename {
+  font-size: 0.75rem;
+  color: #666;
+  text-align: center;
+  max-width: 160px;
+  word-break: break-all;
+  line-height: 1.2;
+}
+
+/* Lightbox link styling */
+.lightbox-link {
+  text-decoration: none;
+  display: block;
+  transition: opacity 0.2s ease;
+}
+
+.lightbox-link:hover {
+  opacity: 0.9;
+}
+
+/* Video caption in lightbox */
+.video-caption {
+  color: white;
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+/* Responsive design */
+@media (max-width: 1200px) {
+  .table-scroll {
+    height: 70vh;
+  }
+  
+  .thumbnail-image {
+    width: 140px;
+    height: 78px;
+  }
+  
+  .table-scroll td {
+    min-width: 180px;
+    height: 160px;
+  }
+}
+
+@media (max-width: 768px) {
+  .intro h1 {
+    font-size: 2rem;
+  }
+  
+  .intro p {
+    font-size: 1rem;
+  }
+  
+  .table-scroll {
+    height: 60vh;
+    margin: 1rem;
+  }
+  
+  .thumbnail-image {
+    width: 120px;
+    height: 68px;
+  }
+  
+  .table-scroll td {
+    min-width: 160px;
+    height: 140px;
+  }
+  
+  .table-scroll th,
+  .table-scroll td {
+    padding: 0.5rem;
+  }
+}
+
+/* Focus styles for accessibility */
+.lightbox-link:focus {
+  outline: 2px solid #3498db;
+  outline-offset: 2px;
+}
+
+/* Empty cell styling */
+.table-scroll td:empty::after {
+  content: '';
+  opacity: 0.3;
+}

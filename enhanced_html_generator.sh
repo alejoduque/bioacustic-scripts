@@ -1,3 +1,65 @@
+#!/bin/bash
+
+# Enhanced HTML gallery generator with metadata extraction
+# Extracts file metadata and creates interactive gallery with GPS entry
+
+echo "Scanning for thumbnail files and extracting metadata..."
+
+# Find all thumbnail files in current directory
+thumbnails=($(ls *-thumbnail.png 2>/dev/null | sort))
+
+if [ ${#thumbnails[@]} -eq 0 ]; then
+    echo "No thumbnail files found (*-thumbnail.png)"
+    exit 1
+fi
+
+echo "Found ${#thumbnails[@]} thumbnail files"
+
+# Function to extract metadata from WAV file
+extract_metadata() {
+    local wav_file="$1"
+    local metadata_json=""
+    
+    if [ -f "$wav_file" ]; then
+        # Extract metadata using ffprobe
+        metadata_json=$(ffprobe -v quiet -print_format json -show_format "$wav_file" 2>/dev/null)
+        
+        # Extract specific fields
+        local comment=$(echo "$metadata_json" | jq -r '.format.tags.comment // ""' 2>/dev/null)
+        local artist=$(echo "$metadata_json" | jq -r '.format.tags.artist // ""' 2>/dev/null)
+        local duration=$(echo "$metadata_json" | jq -r '.format.duration // ""' 2>/dev/null)
+        local size=$(echo "$metadata_json" | jq -r '.format.size // ""' 2>/dev/null)
+        local bitrate=$(echo "$metadata_json" | jq -r '.format.bit_rate // ""' 2>/dev/null)
+        
+        # Format duration if available
+        if [ -n "$duration" ] && [ "$duration" != "null" ] && [ "$duration" != "" ]; then
+            # Use awk for more reliable floating point arithmetic
+            local minutes=$(echo "$duration" | awk '{print int($1/60)}')
+            local seconds=$(echo "$duration" | awk '{printf "%.1f", $1%60}')
+            duration="${minutes}m ${seconds}s"
+        fi
+        
+        # Format file size if available
+        if [ -n "$size" ] && [ "$size" != "null" ]; then
+            size=$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "$size bytes")
+        fi
+        
+        # Format bitrate if available
+        if [ -n "$bitrate" ] && [ "$bitrate" != "null" ] && [ "$bitrate" != "" ]; then
+            bitrate="$(echo "$bitrate" | awk '{printf "%.0fk", $1/1000}')"
+        fi
+        
+        echo "$comment|$artist|$duration|$size|$bitrate"
+    else
+        echo "||||"
+    fi
+}
+
+# Delete old index.html if it exists
+[ -f "index.html" ] && rm index.html
+
+# Start HTML document
+cat > index.html << 'EOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -387,62 +449,107 @@
         </div>
         
         <div class="grid" id="grid">
-            <div class="card" data-filename="20240702_115751" data-comment="Recorded at 11:57:51 02/07/2024 (UTC) by AudioMoth 24E144036486AA86 at medium gain while battery was 4.8V and temperature was 31.7C. Recording stopped due to switch position change." data-artist="AudioMoth 24E144036486AA86" data-duration="11m 18.6s">
-                <div class="card-media" onclick="openLightbox('20240702_115751.mp4', '20240702_115751', 'true')">
-                    <img src="20240702_115751-thumbnail.png" alt="20240702_115751" class="thumbnail">
-                    <div class="play-overlay">▶</div>
+EOF
+
+# Generate cards for each thumbnail
+echo "Extracting metadata from WAV files..."
+for thumbnail in "${thumbnails[@]}"; do
+    # Extract base name (remove -thumbnail.png)
+    basename=${thumbnail%-thumbnail.png}
+    
+    # Look for corresponding WAV file
+    wav_file=""
+    for ext in .WAV .wav; do
+        if [ -f "${basename}${ext}" ]; then
+            wav_file="${basename}${ext}"
+            break
+        fi
+    done
+    
+    # Extract metadata
+    if [ -n "$wav_file" ]; then
+        metadata_info=$(extract_metadata "$wav_file")
+        IFS='|' read -r comment artist duration size bitrate <<< "$metadata_info"
+        echo "  Processed: $basename"
+    else
+        comment=""
+        artist=""
+        duration=""
+        size=""
+        bitrate=""
+        echo "  Warning: No WAV file found for $basename"
+    fi
+    
+    # Check if corresponding video exists
+    video_file="${basename}.mp4"
+    has_video="false"
+    if [ -f "$video_file" ]; then
+        has_video="true"
+    fi
+    
+    # Generate card HTML
+    cat >> index.html << EOF
+            <div class="card" data-filename="$basename" data-comment="$comment" data-artist="$artist" data-duration="$duration">
+                <div class="card-media" onclick="openLightbox('$video_file', '$basename', '$has_video')">
+                    <img src="$thumbnail" alt="$basename" class="thumbnail">
+EOF
+
+    if [ "$has_video" == "true" ]; then
+        echo "                    <div class=\"play-overlay\">▶</div>" >> index.html
+    fi
+
+    cat >> index.html << EOF
                 </div>
                 <div class="card-content">
-                    <div class="card-title">20240702_115751</div>
-                    <div class="metadata-comment">📝 Recorded at 11:57:51 02/07/2024 (UTC) by AudioMoth 24E144036486AA86 at medium gain while battery was 4.8V and temperature was 31.7C. Recording stopped due to switch position change.</div>
-                    <div class="metadata-grid">
-                        <div class="metadata-item"><span class="metadata-label">Duration:</span><span class="metadata-value">11m 18.6s</span></div>
-                        <div class="metadata-item"><span class="metadata-label">Size:</span><span class="metadata-value">497MiB</span></div>
-                        <div class="metadata-item"><span class="metadata-label">Bitrate:</span><span class="metadata-value">6144kbps</span></div>
-                        <div class="metadata-item"><span class="metadata-label">Device:</span><span class="metadata-value">AudioMoth 24E144036486AA86</span></div>
+                    <div class="card-title">$basename</div>
+EOF
+
+    # Add comment if exists
+    if [ -n "$comment" ] && [ "$comment" != "null" ]; then
+        echo "                    <div class=\"metadata-comment\">📝 $comment</div>" >> index.html
+    fi
+
+    # Add metadata grid
+    echo "                    <div class=\"metadata-grid\">" >> index.html
+    
+    if [ -n "$duration" ] && [ "$duration" != "null" ]; then
+        echo "                        <div class=\"metadata-item\"><span class=\"metadata-label\">Duration:</span><span class=\"metadata-value\">$duration</span></div>" >> index.html
+    fi
+    
+    if [ -n "$size" ] && [ "$size" != "null" ]; then
+        echo "                        <div class=\"metadata-item\"><span class=\"metadata-label\">Size:</span><span class=\"metadata-value\">$size</span></div>" >> index.html
+    fi
+    
+    if [ -n "$bitrate" ] && [ "$bitrate" != "null" ]; then
+        echo "                        <div class=\"metadata-item\"><span class=\"metadata-label\">Bitrate:</span><span class=\"metadata-value\">${bitrate}bps</span></div>" >> index.html
+    fi
+    
+    if [ -n "$artist" ] && [ "$artist" != "null" ]; then
+        echo "                        <div class=\"metadata-item\"><span class=\"metadata-label\">Device:</span><span class=\"metadata-value\">$artist</span></div>" >> index.html
+    fi
+
+    # Add GPS section
+    cat >> index.html << EOF
                     </div>
                     <div class="gps-section">
                         <div class="gps-input">
-                            <input type="text" placeholder="Latitude" class="gps-lat" data-file="20240702_115751">
-                            <input type="text" placeholder="Longitude" class="gps-lng" data-file="20240702_115751">
+                            <input type="text" placeholder="Latitude" class="gps-lat" data-file="$basename">
+                            <input type="text" placeholder="Longitude" class="gps-lng" data-file="$basename">
                         </div>
                         <div class="gps-buttons">
-                            <button class="btn-small btn-save" onclick="saveGPS('20240702_115751')">Save</button>
-                            <button class="btn-small btn-map" onclick="openMap('20240702_115751')">Map</button>
-                            <button class="btn-small btn-clear" onclick="clearGPS('20240702_115751')">Clear</button>
+                            <button class="btn-small btn-save" onclick="saveGPS('$basename')">Save</button>
+                            <button class="btn-small btn-map" onclick="openMap('$basename')">Map</button>
+                            <button class="btn-small btn-clear" onclick="clearGPS('$basename')">Clear</button>
                         </div>
-                        <div class="gps-display" id="gps-display-20240702_115751"></div>
+                        <div class="gps-display" id="gps-display-$basename"></div>
                     </div>
                 </div>
             </div>
-            <div class="card" data-filename="ranasNoche" data-comment="Recorded at 17:57:23 20/11/2024 (UTC-5) by AudioMoth 24E144036486AA86 at medium gain while battery was 4.7V and temperature was 23.6C. Recording stopped due to switch position change." data-artist="AudioMoth 24E144036486AA86" data-duration="11m 50.0s">
-                <div class="card-media" onclick="openLightbox('ranasNoche.mp4', 'ranasNoche', 'true')">
-                    <img src="ranasNoche-thumbnail.png" alt="ranasNoche" class="thumbnail">
-                    <div class="play-overlay">▶</div>
-                </div>
-                <div class="card-content">
-                    <div class="card-title">ranasNoche</div>
-                    <div class="metadata-comment">📝 Recorded at 17:57:23 20/11/2024 (UTC-5) by AudioMoth 24E144036486AA86 at medium gain while battery was 4.7V and temperature was 23.6C. Recording stopped due to switch position change.</div>
-                    <div class="metadata-grid">
-                        <div class="metadata-item"><span class="metadata-label">Duration:</span><span class="metadata-value">11m 50.0s</span></div>
-                        <div class="metadata-item"><span class="metadata-label">Size:</span><span class="metadata-value">261MiB</span></div>
-                        <div class="metadata-item"><span class="metadata-label">Bitrate:</span><span class="metadata-value">3072kbps</span></div>
-                        <div class="metadata-item"><span class="metadata-label">Device:</span><span class="metadata-value">AudioMoth 24E144036486AA86</span></div>
-                    </div>
-                    <div class="gps-section">
-                        <div class="gps-input">
-                            <input type="text" placeholder="Latitude" class="gps-lat" data-file="ranasNoche">
-                            <input type="text" placeholder="Longitude" class="gps-lng" data-file="ranasNoche">
-                        </div>
-                        <div class="gps-buttons">
-                            <button class="btn-small btn-save" onclick="saveGPS('ranasNoche')">Save</button>
-                            <button class="btn-small btn-map" onclick="openMap('ranasNoche')">Map</button>
-                            <button class="btn-small btn-clear" onclick="clearGPS('ranasNoche')">Clear</button>
-                        </div>
-                        <div class="gps-display" id="gps-display-ranasNoche"></div>
-                    </div>
-                </div>
-            </div>
+EOF
+done
+
+# Close HTML and add JavaScript
+cat >> index.html << 'EOF'
         </div>
         
         <div class="no-results" id="noResults" style="display: none;">
@@ -702,3 +809,13 @@
     </script>
 </body>
 </html>
+EOF
+
+echo "Generated enhanced index.html with:"
+echo "  ✓ Metadata extraction from WAV files"
+echo "  ✓ Interactive GPS coordinate entry"
+echo "  ✓ Search and filtering capabilities"
+echo "  ✓ Modern responsive design"
+echo "  ✓ Local storage for GPS data"
+echo "  ✓ Google Maps integration"
+echo "  ✓ ${#thumbnails[@]} audio recordings processed"
