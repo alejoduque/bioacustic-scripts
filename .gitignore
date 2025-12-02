@@ -1,5 +1,29 @@
-# Media files
-*.png
-*.wav
-*.WAV
-*.mp4
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.audiomoth_venv/
+env/
+venv/
+*.so
+
+# Archivos de audio - NO SUBIR (en cualquier ubicación)
+**/*.WAV
+**/*.wav
+**/*.mp3
+**/*.flac
+**/*.ogg
+
+# Reportes HTML generados - NO SUBIR
+audiomoth_reporte.html
+*_reporte.html
+
+# Subdirectorios específicos con grabaciones
+**/Epoca*/
+
+# Sistema
+.DS_Store
+*.swp
+.vscode/
+.idea/
