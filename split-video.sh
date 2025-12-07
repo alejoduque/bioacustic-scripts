@@ -27,97 +27,92 @@ convert_to_bytes() {
 }
 
 # Default parameters
-DEFAULT_FFMPEG_ARGS="-c:v libx264 -crf 23 -c:a copy -vf scale=1080:-1"
+DEFAULT_SCALE="scale=1080:-1"
 
 if [ $# -lt 2 ] || [ $# -gt 3 ]; then
     echo 'Illegal number of parameters. Needs 2-3 parameters:'
     echo 'Usage:'
-    echo './split-video.sh FILE SIZELIMIT [FFMPEG_ARGS]'
+    echo './split-video.sh FILE SIZELIMIT [SCALE]'
     echo 
     echo 'Parameters:'
     echo '    - FILE:        Name of the video file to split'
     echo '    - SIZELIMIT:   Maximum file size of each part (e.g., 60M, 500M, 1G)'
-    echo '    - FFMPEG_ARGS: Additional arguments to pass to each ffmpeg-call'
-    echo "                   (default: \"$DEFAULT_FFMPEG_ARGS\")"
+    echo '    - SCALE:       Video scale filter (default: "scale=1080:-1")'
     echo
     echo 'Examples:'
     echo '    ./split-video.sh video.mp4 60M'
-    echo '    ./split-video.sh video.mp4 500M "-c:v libx265 -crf 28"'
+    echo '    ./split-video.sh video.mp4 500M "scale=720:-1"'
     exit 1
 fi
 
 FILE="$1"
 SIZELIMIT_INPUT="$2"
-FFMPEG_ARGS="${3:-$DEFAULT_FFMPEG_ARGS}"
+SCALE="${3:-$DEFAULT_SCALE}"
 
 # Convert size limit to bytes
 SIZELIMIT=$(convert_to_bytes "$SIZELIMIT_INPUT")
 
 echo "Size limit: $SIZELIMIT_INPUT ($SIZELIMIT bytes)"
 
-# Duration of the source video
-DURATION=$(ffprobe -i "$FILE" -show_entries format=duration -v quiet -of default=noprint_wrappers=1:nokey=1 | cut -d. -f1)
+# Get video information
+DURATION=$(ffprobe -i "$FILE" -show_entries format=duration -v quiet -of default=noprint_wrappers=1:nokey=1)
+AUDIO_BITRATE=$(ffprobe -i "$FILE" -select_streams a:0 -show_entries stream=bit_rate -v quiet -of default=noprint_wrappers=1:nokey=1)
 
-# Duration that has been encoded so far
-CUR_DURATION=0
+# Set default audio bitrate if not detected
+if [ -z "$AUDIO_BITRATE" ] || [ "$AUDIO_BITRATE" = "N/A" ]; then
+    AUDIO_BITRATE=128000  # 128 kbps default
+fi
+
+echo "Source duration: $DURATION seconds"
+echo "Audio bitrate: $((AUDIO_BITRATE / 1000)) kbps"
+
+# Calculate chunk duration based on target filesize
+# Formula: duration = (filesize_bytes * 8) / (video_bitrate + audio_bitrate)
+# We'll use 80% of target size to account for overhead
+TARGET_BITRATE=$(echo "($SIZELIMIT * 8 * 0.8) / $DURATION - $AUDIO_BITRATE" | bc)
+CHUNK_DURATION=$(echo "$SIZELIMIT * 8 / ($TARGET_BITRATE + $AUDIO_BITRATE)" | bc)
+
+echo "Calculated video bitrate: $((TARGET_BITRATE / 1000)) kbps"
+echo "Chunk duration: $CHUNK_DURATION seconds"
 
 # Filename of the source video (without extension)
 BASENAME="${FILE%.*}"
-
-# Extension for the video parts
 EXTENSION="mp4"
 
-# Number of the current video part
-i=1
+# Current position in video
+CUR_TIME=0
+PART=1
 
-# Filename of the next video part
-NEXTFILENAME="$BASENAME-$i.$EXTENSION"
-
-echo "Duration of source video: $DURATION seconds"
 echo "Starting split process... (Press Ctrl+C to cancel)"
 echo
 
-# Until the duration of all partial videos has reached the duration of the source video
-while [[ $CUR_DURATION -lt $DURATION ]]; do
-    echo "=== Encoding part $i ==="
-    echo "Command: ffmpeg -ss $CUR_DURATION -i \"$FILE\" -fs $SIZELIMIT $FFMPEG_ARGS \"$NEXTFILENAME\""
+while (( $(echo "$CUR_TIME < $DURATION" | bc -l) )); do
+    NEXTFILENAME="$BASENAME-$PART.$EXTENSION"
     
-    # Encode next part
-    ffmpeg -ss "$CUR_DURATION" -i "$FILE" -fs "$SIZELIMIT" $FFMPEG_ARGS "$NEXTFILENAME"
+    echo "=== Encoding part $PART ==="
+    echo "Time range: $CUR_TIME to $(echo "$CUR_TIME + $CHUNK_DURATION" | bc) seconds"
     
-    # Check if file was created successfully
+    # Encode with calculated bitrate
+    ffmpeg -ss "$CUR_TIME" -i "$FILE" -t "$CHUNK_DURATION" \
+        -c:v libx264 -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -bufsize $((TARGET_BITRATE * 2)) \
+        -c:a copy -vf "$SCALE" \
+        -y "$NEXTFILENAME" 2>&1 | grep -E "time=|size="
+    
     if [ ! -f "$NEXTFILENAME" ]; then
         echo "Error: Failed to create $NEXTFILENAME"
         exit 1
     fi
     
-    # Duration of the new part
-    NEW_DURATION=$(ffprobe -i "$NEXTFILENAME" -show_entries format=duration -v quiet -of default=noprint_wrappers=1:nokey=1 | cut -d. -f1)
+    # Get actual filesize
+    FILESIZE=$(stat -f%z "$NEXTFILENAME" 2>/dev/null || stat -c%s "$NEXTFILENAME" 2>/dev/null)
+    FILESIZE_MB=$(echo "scale=2; $FILESIZE / 1024 / 1024" | bc)
     
-    # Check if we got a valid duration
-    if [ -z "$NEW_DURATION" ] || [ "$NEW_DURATION" -eq 0 ]; then
-        echo "Warning: Part $i has zero or invalid duration. This likely means we've reached the end."
-        break
-    fi
-    
-    # Total duration encoded so far
-    CUR_DURATION=$((CUR_DURATION + NEW_DURATION))
-    
-    echo "Duration of $NEXTFILENAME: $NEW_DURATION seconds"
-    echo "Total encoded so far: $CUR_DURATION / $DURATION seconds"
+    echo "✓ Created: $NEXTFILENAME (${FILESIZE_MB}MB)"
     echo
     
-    # Check if we've encoded everything
-    if [[ $CUR_DURATION -ge $DURATION ]]; then
-        echo "✓ All parts encoded successfully!"
-        break
-    fi
-    
-    i=$((i + 1))
-    NEXTFILENAME="$BASENAME-$i.$EXTENSION"
+    CUR_TIME=$(echo "$CUR_TIME + $CHUNK_DURATION" | bc)
+    PART=$((PART + 1))
 done
 
-echo
 echo "=== Split completed ==="
-echo "Total parts created: $i"
-echo "Total duration processed: $CUR_DURATION seconds"
+echo "Total parts created: $((PART - 1))"
