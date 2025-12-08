@@ -1,0 +1,166 @@
+#!/bin/bash
+
+# HDR Batch Processing Script
+# Processes sets of 5 DNG files using enfuse to create HDR images
+
+# Configuration
+INPUT_DIR="."
+OUTPUT_DIR="./hdr_output"
+TEMP_DIR="./temp_tiff"
+GROUP_SIZE=5
+CLEANUP_TEMP=true  # Set to false to keep TIFF files
+
+# Color codes
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Function to draw progress bar
+draw_progress_bar() {
+    local current=$1
+    local total=$2
+    local width=50
+    local percentage=$((current * 100 / total))
+    local filled=$((width * current / total))
+    local empty=$((width - filled))
+    
+    printf "\r${CYAN}Progress: [${NC}"
+    printf "%${filled}s" | tr ' ' '█'
+    printf "%${empty}s" | tr ' ' '░'
+    printf "${CYAN}] ${NC}${YELLOW}%3d%%${NC} ${BLUE}(%d/%d)${NC}" $percentage $current $total
+}
+
+# Create output directory if it doesn't exist
+mkdir -p "$OUTPUT_DIR"
+mkdir -p "$TEMP_DIR"
+
+# Get sorted list of DNG files
+files=($(ls -1 *.DNG 2>/dev/null | sort))
+
+# Check if we have any files
+if [ ${#files[@]} -eq 0 ]; then
+    echo -e "${RED}✗ Error: No DNG files found in current directory${NC}"
+    exit 1
+fi
+
+# Calculate number of complete groups
+total_files=${#files[@]}
+num_groups=$((total_files / GROUP_SIZE))
+remaining=$((total_files % GROUP_SIZE))
+
+echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║${NC}          ${CYAN}HDR Batch Processing Script${NC}              ${BLUE}║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${GREEN}📁 Found $total_files DNG files${NC}"
+echo -e "${GREEN}📦 Will process $num_groups complete sets of $GROUP_SIZE images${NC}"
+if [ $remaining -gt 0 ]; then
+    echo -e "${YELLOW}⚠️  Warning: $remaining file(s) will be left unprocessed${NC}"
+fi
+echo ""
+
+# Ask for output filename pattern
+echo -e "${CYAN}📝 Enter the base name for your HDR files${NC}"
+echo -e "${CYAN}   (files will be named: <basename>_001.jpg, <basename>_002.jpg, etc.)${NC}"
+read -p "   Base name: " base_name
+
+# Validate input
+if [ -z "$base_name" ]; then
+    echo -e "${YELLOW}⚠️  No name provided, using default 'hdr_final'${NC}"
+    base_name="hdr_final"
+fi
+
+echo ""
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}🚀 Starting HDR processing...${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Check if dcraw is installed
+if ! command -v dcraw &> /dev/null; then
+    echo -e "${RED}✗ Error: dcraw is not installed${NC}"
+    echo -e "${YELLOW}   Install it with: sudo apt install dcraw${NC}"
+    exit 1
+fi
+
+# Process each group
+for ((i=0; i<num_groups; i++)); do
+    counter=$((i + 1))
+    start_idx=$((i * GROUP_SIZE))
+    
+    # Get the 5 files for this group
+    group_files=()
+    tiff_files=()
+    for ((j=0; j<GROUP_SIZE; j++)); do
+        dng_file="${files[$((start_idx + j))]}"
+        group_files+=("$dng_file")
+        
+        # Generate TIFF filename
+        base_name_file="${dng_file%.DNG}"
+        tiff_file="$TEMP_DIR/${base_name_file}.tiff"
+        tiff_files+=("$tiff_file")
+    done
+    
+    # Create output filename
+    output_file="$OUTPUT_DIR/${base_name}_$(printf "%03d" $counter).jpg"
+    
+    # Display processing info
+    echo -e "${CYAN}🔄 Processing set $counter of $num_groups${NC}"
+    echo -e "${BLUE}   ├─ Step 1: Converting DNG to TIFF${NC}"
+    
+    # Convert DNG files to TIFF
+    for ((j=0; j<GROUP_SIZE; j++)); do
+        dng="${group_files[$j]}"
+        tiff="${tiff_files[$j]}"
+        echo -e "${BLUE}   │  🔧 Converting ${NC}$dng${BLUE} → TIFF...${NC}"
+        dcraw -T -6 -W -o 1 -q 3 "$dng" 2>/dev/null
+        
+        # dcraw creates the TIFF in the current directory, move it to temp
+        generated_tiff="${dng%.DNG}.tiff"
+        if [ -f "$generated_tiff" ]; then
+            mv "$generated_tiff" "$tiff"
+        fi
+    done
+    
+    echo -e "${BLUE}   ├─ Step 2: Creating HDR with enfuse${NC}"
+    echo -e "${BLUE}   └─ Output:${NC} $output_file"
+    echo ""
+    
+    # Run enfuse on TIFF files
+    enfuse --compression=95 -o "$output_file" "${tiff_files[@]}" 2>/dev/null
+    
+    # Draw progress bar after completion
+    draw_progress_bar $counter $num_groups
+    echo "" # New line after progress bar
+    
+    if [ $? -eq 0 ] && [ -f "$output_file" ]; then
+        file_size=$(du -h "$output_file" | cut -f1)
+        echo -e "${GREEN}   ✓ Successfully created $output_file ${YELLOW}($file_size)${NC}"
+        
+        # Clean up temporary TIFF files if enabled
+        if [ "$CLEANUP_TEMP" = true ]; then
+            for tiff in "${tiff_files[@]}"; do
+                rm -f "$tiff"
+            done
+        fi
+    else
+        echo -e "${RED}   ✗ Error processing set $counter${NC}"
+    fi
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+done
+
+# Clean up temp directory if empty
+if [ "$CLEANUP_TEMP" = true ]; then
+    rmdir "$TEMP_DIR" 2>/dev/null
+fi
+
+echo ""
+echo -e "${GREEN}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║${NC}  ${CYAN}✨ Processing complete!${NC}                            ${GREEN}║${NC}"
+echo -e "${GREEN}║${NC}  ${YELLOW}📊 Generated $num_groups HDR images${NC}                       ${GREEN}║${NC}"
+echo -e "${GREEN}║${NC}  ${YELLOW}📂 Location: $OUTPUT_DIR/${NC}                ${GREEN}║${NC}"
+echo -e "${GREEN}╚════════════════════════════════════════════════════════╝${NC}"
