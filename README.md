@@ -1,1 +1,1 @@
-https://etc.radiolibre.xyz/staticbioacustics/index.html
+https://etc.altred.xyz/staticbioacustics/index.html
