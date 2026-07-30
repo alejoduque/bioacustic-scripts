@@ -9,22 +9,59 @@ a Config instance.
 from dataclasses import dataclass, field
 
 
+# Audible-range band table. Bands are half-open [lo, hi) in Hz and are clipped
+# to Nyquist at analysis time, so a 48 kHz recording simply reports zero energy
+# in any band above 24 kHz rather than inventing content.
+AUDIBLE_BANDS = {
+    "geophony": (0, 2000),           # wind, rain, water, distant thunder
+    "biophony_low": (2000, 4000),    # anurans, large mammals, dove/tinamou calls
+    "biophony_mid": (4000, 8000),    # most passerine song, many orthopterans
+    "biophony_high": (8000, 16000),  # cicadas, katydids, high passerines
+    "ultrasonic": (16000, 24000),    # the low edge of bat calls, if SR allows
+}
+
+# Ultrasonic band table, used when analysing at the recorder's native rate.
+# Splits chosen for neotropical dry-forest bat assemblages:
+#   16-40 kHz   Molossidae (free-tailed bats), some Vespertilionidae, katydids
+#   40-80 kHz   most Vespertilionidae and Phyllostomidae search-phase calls
+#   80-160 kHz  high-frequency Phyllostomidae, terminal feeding buzzes
+ULTRASONIC_BANDS = {
+    "geophony": (0, 2000),
+    "biophony_low": (2000, 4000),
+    "biophony_mid": (4000, 8000),
+    "biophony_high": (8000, 16000),
+    "ultrasonic_low": (16000, 40000),
+    "ultrasonic_mid": (40000, 80000),
+    "ultrasonic_high": (80000, 160000),
+}
+
+
 @dataclass
 class SpectralConfig:
     """STFT and spectral analysis parameters."""
     frame_size: int = 2048
     hop_size: int = 512  # 75% overlap
     window: str = "hann"
-    target_sr: int = 48000  # Downsample recordings >48kHz to this for detection
+
+    # Recordings above target_sr are downsampled to it before detection, which
+    # bounds cost and keeps time/frequency resolution matched to bird syllables.
+    # Set to 0 to analyse at the recorder's native rate — required for bats,
+    # since anything above target_sr/2 is otherwise discarded by the anti-alias
+    # filter. See Config.ultrasonic.
+    target_sr: int = 48000
 
     # Ecological frequency bands (Hz)
-    bands: dict = field(default_factory=lambda: {
-        "geophony": (0, 2000),        # wind, rain, water
-        "biophony_low": (2000, 4000),  # amphibians, large mammals
-        "biophony_mid": (4000, 8000),  # birds, many insects
-        "biophony_high": (8000, 16000),  # insects, bats
-        "ultrasonic": (16000, 24000),  # bats (if SR allows)
-    })
+    bands: dict = field(default_factory=lambda: dict(AUDIBLE_BANDS))
+
+    @property
+    def analysis_window_s(self) -> float:
+        """STFT window length in seconds at the given rate (see resolution())."""
+        return self.frame_size / max(self.target_sr, 1)
+
+    def resolution(self, sample_rate: int) -> tuple[float, float]:
+        """(frequency resolution in Hz, time resolution in ms) at a given rate."""
+        return (sample_rate / self.frame_size,
+                1000.0 * self.hop_size / sample_rate)
 
 
 @dataclass
@@ -76,6 +113,8 @@ class VideoConfig:
     with per-domain colormaps layered on top so event types are visually
     distinguishable at a glance.
     """
+    # Size of the spectrogram area. With legend=enable ffmpeg pads axes, labels
+    # and the dBFS bar around it, so these defaults yield a 1280x720 file.
     width: int = 996
     height: int = 592
     dynamic_range: int = 72
@@ -184,6 +223,40 @@ class Config:
     no_osc: bool = False
     build_phenology: bool = False
     build_gallery: bool = True
+
+    # Analyse at the recorder's native rate and extend the band table to cover
+    # bat echolocation. Only meaningful for recordings made above 48 kHz.
+    ultrasonic: bool = False
+
+
+def apply_ultrasonic(config: Config, adjust_timing: bool = True) -> Config:
+    """
+    Switch a Config into ultrasonic mode, in place.
+
+    Four things have to change together, or bats stay invisible or unusable:
+      1. no downsampling, so content above 24 kHz survives
+      2. a band table that reaches past 16 kHz
+      3. a shorter STFT window, because echolocation pulses are 1-10 ms and a
+         2048-sample window at 192 kHz already spans 10.7 ms — a whole call
+      4. event timing on a bat's scale rather than a chorus's: a pass is one to
+         three seconds and passes are separated by seconds, so the audible
+         defaults (merge anything within 5 s, discard anything under 2 s)
+         collapse a night of foraging into one undifferentiated block
+
+    Video framing (max frequency, log axis) is set per recording from its
+    actual sample rate; see pipeline.video_config_for.
+
+    Pass adjust_timing=False to keep detector timings the caller set explicitly.
+    """
+    config.ultrasonic = True
+    config.spectral.target_sr = 0          # 0 = keep native rate
+    config.spectral.bands = dict(ULTRASONIC_BANDS)
+    config.spectral.frame_size = 1024
+    config.spectral.hop_size = 256
+    if adjust_timing:
+        config.detector.merge_gap_s = 1.0
+        config.detector.min_event_duration_s = 0.3
+    return config
 
 
 # --- Sensitivity presets, surfaced by name in the wizard ---

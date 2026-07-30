@@ -10,12 +10,22 @@ Everything goes through subprocess argument lists, so filenames with spaces,
 commas and accents (e.g. "Lagunas, lagos y ciénagas naturales") are safe.
 """
 
+import functools
 import math
+import os
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+# Homebrew's stock ffmpeg bottle is built without libfreetype, so it has no
+# drawtext filter and cannot burn labels into a frame. ffmpeg-full does, but it
+# is keg-only and therefore off PATH. Prefer a fuller build when one is present.
+_FFMPEG_CANDIDATES = (
+    "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
+    "/usr/local/opt/ffmpeg-full/bin/ffmpeg",
+)
 
 # macOS / Linux fonts that ffmpeg's drawtext can load without fontconfig
 _FONT_CANDIDATES = (
@@ -31,12 +41,65 @@ class FFmpegMissing(RuntimeError):
     """Raised when a render is requested but ffmpeg is not installed."""
 
 
+@functools.cache
 def ffmpeg_path() -> str | None:
+    """
+    Locate ffmpeg, preferring a build that can render text.
+
+    Order: $FFMPEG_BIN, a keg-only ffmpeg-full if installed, then PATH.
+    """
+    override = os.environ.get("FFMPEG_BIN")
+    if override and Path(override).is_file():
+        return override
+    for candidate in _FFMPEG_CANDIDATES:
+        if Path(candidate).is_file():
+            return candidate
     return shutil.which("ffmpeg")
 
 
+@functools.cache
 def ffprobe_path() -> str | None:
+    override = os.environ.get("FFPROBE_BIN")
+    if override and Path(override).is_file():
+        return override
+    for candidate in _FFMPEG_CANDIDATES:
+        probe = candidate.replace("/ffmpeg", "/ffprobe")
+        if Path(probe).is_file():
+            return probe
     return shutil.which("ffprobe")
+
+
+@functools.cache
+def available_filters() -> frozenset[str]:
+    """Names of the filters this ffmpeg build actually provides."""
+    exe = ffmpeg_path()
+    if exe is None:
+        return frozenset()
+    proc = subprocess.run([exe, "-hide_banner", "-filters"],
+                          capture_output=True, text=True)
+    names = set()
+    for line in proc.stdout.splitlines():
+        parts = line.split()
+        # Filter rows look like " T.. drawtext  V->V  Draw text on top of…".
+        # The arrow in the third column is what distinguishes them from the
+        # legend lines ("T.. = Timeline support") above the table.
+        if len(parts) >= 4 and len(parts[0]) <= 4 and "->" in parts[2]:
+            names.add(parts[1])
+    return frozenset(names)
+
+
+def has_filter(name: str) -> bool:
+    return name in available_filters()
+
+
+def can_draw_text() -> bool:
+    """
+    Whether text can be burned into a frame.
+
+    False on builds without libfreetype — notably the current Homebrew ffmpeg
+    bottle. Renders still work; they just carry no overlay.
+    """
+    return has_filter("drawtext")
 
 
 def have_ffmpeg() -> bool:
@@ -126,14 +189,21 @@ def probe_audio_bitrate(path: str, default: int = 128_000) -> int:
 
 @dataclass
 class TextOverlay:
-    """A single drawtext layer. Text is passed via file to avoid escaping bugs."""
+    """
+    A single drawtext layer. Text is passed via file to avoid escaping bugs.
+
+    Styling is deliberately monochrome: white glyphs with a 1-pixel black
+    outline and no filled box. A filled box hides the spectrogram underneath it,
+    and coloured text competes with the colormap — which is the only thing in
+    the frame that is supposed to carry meaning through colour.
+    """
     text: str
     x: str
     y: str
     font_size: int = 20
     color: str = "white"
-    box_color: str = "black@0.5"
-    box_border: int = 2
+    border_width: int = 1
+    border_color: str = "black"
 
 
 class OverlayTexts:
@@ -156,14 +226,19 @@ class OverlayTexts:
         path.write_text(overlay.text, encoding="utf-8")
         parts = [
             f"drawtext=textfile={path}",
+            # Our overlays are always literal. Without expansion=none, drawtext
+            # reads '%' as the start of a %{...} sequence and silently drops the
+            # entire label — "Dawn Chorus (80%)" renders as nothing at all, and
+            # ffmpeg still exits 0.
+            "expansion=none",
             "reload=0",
             f"x={overlay.x}",
             f"y={overlay.y}",
             f"fontsize={overlay.font_size}",
             f"fontcolor={overlay.color}",
-            "box=1",
-            f"boxcolor={overlay.box_color}",
-            f"boxborderw={overlay.box_border}",
+            "box=0",
+            f"borderw={overlay.border_width}",
+            f"bordercolor={overlay.border_color}",
         ]
         if self.font_file:
             parts.insert(1, f"fontfile={self.font_file}")

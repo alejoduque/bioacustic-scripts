@@ -11,6 +11,7 @@ A batch adds the cross-recording layer that the whole toolkit exists for:
 """
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +20,7 @@ import soundfile as sf
 from . import store
 from .classifier import Classification, classify_event, parliament_summary
 from .clipper import extract_clips, select_events
-from .config import Config
+from .config import Config, VideoConfig
 from .detector import Event, detect_events
 from .gallery import generate_gallery
 from .indices import compute_all_indices
@@ -35,8 +36,22 @@ from .report import generate_event_report, generate_summary_report
 from .spectral import analyze
 from .video import build_event_type_reels, render_all_clips
 
-BAND_NAMES = ("geophony", "biophony_low", "biophony_mid", "biophony_high",
-              "ultrasonic")
+def video_config_for(config: Config, sample_rate: int) -> VideoConfig:
+    """
+    Frame the spectrogram for one recording's sample rate.
+
+    In the audible default the top of the plot stays at max_freq (10 kHz), which
+    is where nearly all bird, frog and insect energy lives — stretching the axis
+    to Nyquist would squash the interesting part into the bottom sliver.
+
+    In ultrasonic mode the axis has to reach Nyquist or the bats are simply not
+    on the picture, and it switches to a logarithmic frequency scale so that
+    0-10 kHz still occupies a readable share of a 0-96 kHz plot.
+    """
+    nyquist = sample_rate // 2
+    if not config.ultrasonic:
+        return replace(config.video, max_freq=min(config.video.max_freq, nyquist))
+    return replace(config.video, max_freq=nyquist, freq_scale="log")
 
 
 def find_wav_files(paths: str | list[str]) -> list[str]:
@@ -151,6 +166,18 @@ def process_single_file(wav_path: str, config: Config) -> dict:
     duration_s = len(audio_mono) / sr
     print(f"  Duration: {duration_s:.1f}s, SR: {sr}Hz")
 
+    target = config.spectral.target_sr
+    if not config.ultrasonic and target and sr > 2 * target:
+        print(f"  ! This recording carries content up to {sr // 2000} kHz, but "
+              f"analysis downsamples to {target // 1000} kHz.")
+        print(f"    Everything above {target // 2000} kHz — bat echolocation, "
+              f"high katydids — is discarded.")
+        print("    Re-run with --ultrasonic to analyse at the native rate.")
+    if config.ultrasonic:
+        freq_res, time_res = config.spectral.resolution(sr)
+        print(f"  Ultrasonic mode: native {sr}Hz, "
+              f"{freq_res:.0f}Hz / {time_res:.1f}ms resolution")
+
     print("  Extracting metadata...")
     recording_meta = get_recording_metadata(wav_path)
     recording_meta["duration_s"] = duration_s
@@ -204,7 +231,8 @@ def process_single_file(wav_path: str, config: Config) -> dict:
             if not render_video:
                 clip_config = _without_video(clip_config)
             renders = render_all_clips(clip_paths, [d for _, d in selected],
-                                       recording_meta, config.video, clip_config)
+                                       recording_meta,
+                                       video_config_for(config, sr), clip_config)
             for (_, data), render in zip(selected, renders):
                 data.update(render.as_dict())
                 for problem in render.errors:
@@ -216,7 +244,8 @@ def process_single_file(wav_path: str, config: Config) -> dict:
                                                str(file_output_dir), config.clip)
 
     result = _build_result(wav_path, events_data, file_indices, recording_meta,
-                           parliament, str(file_output_dir), duration_s, sr, reels)
+                           parliament, str(file_output_dir), duration_s, sr,
+                           reels, tuple(config.spectral.bands))
 
     json_path = store.write_result(result, str(file_output_dir))
     print(f"  Wrote {json_path}")
@@ -266,14 +295,17 @@ def _print_role_breakdown(parliament: dict) -> None:
 def _build_result(wav_path: str, events_data: list[dict], file_indices: dict,
                   recording_meta: dict, parliament: dict, output_dir: str,
                   duration_s: float, sample_rate: int,
-                  reels: dict[str, str]) -> dict:
+                  reels: dict[str, str],
+                  band_names: tuple = ()) -> dict:
     """Build the in-memory result dict for a processed recording."""
     band_energies = {}
     if events_data:
+        # Band names come from the active table, so an ultrasonic run carries
+        # its bat bands through to the calendar instead of dropping them.
         band_energies = {
             band: float(np.mean([e.get("band_energies", {}).get(band, 0)
                                  for e in events_data]))
-            for band in BAND_NAMES
+            for band in band_names
         }
 
     return {

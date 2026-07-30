@@ -26,25 +26,64 @@ class Event:
     offset_frame: int
 
 
-def running_median_mad(flux: np.ndarray, window_frames: int) -> tuple[np.ndarray, np.ndarray]:
+MAX_BASELINE_ANCHORS = 2000
+BASELINE_WARMUP_FRAMES = 512
+
+
+def running_median_mad(flux: np.ndarray, window_frames: int,
+                       max_anchors: int = MAX_BASELINE_ANCHORS,
+                       warmup: int = BASELINE_WARMUP_FRAMES
+                       ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute running median and MAD (median absolute deviation) over a window.
 
     Uses a causal window (looks back only) so detection is causal.
     For the initial frames where the window is not full, uses all available data.
+
+    Evaluated at up to `max_anchors` points and linearly interpolated between
+    them. The exact form is O(frames x window): at 48 kHz with a 512-sample hop
+    that is merely slow, but ultrasonic mode analyses at the native rate with a
+    256-sample hop — 750 frames per second — where an hour of tape would take
+    days. The baseline is a 60-second running statistic by construction, so it
+    cannot change meaningfully between adjacent anchors; only the threshold
+    comparison, which still happens at every frame, needs full resolution.
+
+    The first `warmup` frames are always exact. That is the one stretch where
+    the baseline genuinely moves fast — the window is still filling, so each new
+    frame can shift the median — and interpolating across it moved an event
+    onset by half a second in testing. After warm-up the window is saturated and
+    the statistic only drifts.
+
+    Inputs shorter than max_anchors are computed exactly (stride 1).
     """
     n = len(flux)
-    median = np.empty(n)
-    mad = np.empty(n)
+    if n == 0:
+        return np.empty(0), np.empty(0)
 
-    for i in range(n):
-        start = max(0, i - window_frames + 1)
-        window = flux[start:i + 1]
+    warmup = min(warmup, n)
+    remaining = n - warmup
+    budget = max(1, max_anchors - warmup)
+    stride = max(1, -(-remaining // budget))  # ceil division
+
+    anchors = list(range(0, warmup)) + list(range(warmup, n, stride))
+    if anchors[-1] != n - 1:
+        anchors.append(n - 1)
+
+    anchor_median = np.empty(len(anchors))
+    anchor_mad = np.empty(len(anchors))
+    for k, i in enumerate(anchors):
+        window = flux[max(0, i - window_frames + 1):i + 1]
         med = np.median(window)
-        median[i] = med
-        mad[i] = np.median(np.abs(window - med))
+        anchor_median[k] = med
+        anchor_mad[k] = np.median(np.abs(window - med))
 
-    return median, mad
+    if stride == 1:
+        return anchor_median, anchor_mad
+
+    frames = np.arange(n)
+    anchor_idx = np.asarray(anchors, dtype=float)
+    return (np.interp(frames, anchor_idx, anchor_median),
+            np.interp(frames, anchor_idx, anchor_mad))
 
 
 def detect_events(flux: np.ndarray, frame_times: np.ndarray,

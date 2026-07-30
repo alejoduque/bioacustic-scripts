@@ -26,7 +26,7 @@ from . import store
 from .classifier import ROLES
 from .config import (SENSITIVITY_PRESETS, ClipConfig, Config, DetectorConfig,
                      OSCConfig, PhenologyConfig, SpectralConfig, VideoConfig,
-                     apply_sensitivity)
+                     apply_sensitivity, apply_ultrasonic)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUBCOMMANDS = ("detect", "phenology", "osc", "gallery", "media", "metadata",
@@ -87,6 +87,11 @@ def _add_detect_parser(sub) -> None:
                    help="Seconds of context after offset (default: 10)")
     d.add_argument("--max-clip-duration", type=float, default=300.0,
                    help="Cap on clip length in seconds (default: 300)")
+    d.add_argument("--ultrasonic", action="store_true",
+                   help="Analyse at the recorder's native rate and extend the "
+                        "bands to cover bat echolocation. Needed for AudioMoth "
+                        "recordings made above 48kHz; without it everything "
+                        "above 24kHz is discarded.")
 
     s = p.add_argument_group("event selection")
     s.add_argument("--roles", type=_csv_list, default=(),
@@ -236,7 +241,7 @@ def config_from_detect_args(args: argparse.Namespace) -> Config:
     if args.merge_gap is not None:
         detector.merge_gap_s = args.merge_gap
 
-    return Config(
+    config = Config(
         spectral=SpectralConfig(),
         detector=detector,
         clip=ClipConfig(
@@ -267,6 +272,11 @@ def config_from_detect_args(args: argparse.Namespace) -> Config:
         build_phenology=args.phenology,
         build_gallery=not args.no_gallery,
     )
+    if args.ultrasonic:
+        # Explicit timing flags win over the mode's bat-scale defaults.
+        apply_ultrasonic(config, adjust_timing=(args.merge_gap is None
+                                                and args.min_event_duration is None))
+    return config
 
 
 # --- command handlers -------------------------------------------------------
@@ -497,7 +507,8 @@ def cmd_metadata(args: argparse.Namespace) -> int:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    from .media import find_font, have_ffmpeg
+    from .media import (can_draw_text, ffmpeg_path, find_font, has_filter,
+                        have_ffmpeg)
     from .video import check_renderer
 
     print("Bioacoustic toolkit — environment check")
@@ -519,8 +530,21 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print("  ! Without ffmpeg you still get clips, JSON, OSC and phenology,")
         print("    but no spectrogram videos, posters or GIFs.")
         print("    macOS: brew install ffmpeg")
-    elif not find_font():
-        print("  Note: no bundled font found; drawtext will use fontconfig's default.")
+    else:
+        print(f"{'  binary':<16} {ffmpeg_path()}")
+        for name in ("showspectrum", "showspectrumpic", "drawtext",
+                     "palettegen", "paletteuse"):
+            state = "ok" if has_filter(name) else "missing"
+            print(f"  {name:<14} {state}")
+        if not can_draw_text():
+            print("  ! No drawtext filter — this ffmpeg was built without")
+            print("    libfreetype, so clip videos carry no burned-in label.")
+            print("    Everything else renders. For labels:")
+            print("      brew install ffmpeg-full   (picked up automatically)")
+            print("    or point FFMPEG_BIN at a build that has drawtext.")
+        elif not find_font():
+            print("  Note: no bundled font found; drawtext will use "
+                  "fontconfig's default.")
 
     script = REPO_ROOT / "AudioMothRECS_LaLuna" / "audiomoth_processing.sh"
     print(f"{'metadata tool':<16} {'ok' if script.is_file() else 'MISSING'}")

@@ -13,8 +13,14 @@ from .config import SpectralConfig
 
 
 def downsample(audio: np.ndarray, sr: int, target_sr: int) -> tuple[np.ndarray, int]:
-    """Downsample audio to target sample rate using polyphase resampling."""
-    if sr <= target_sr:
+    """
+    Downsample audio to target sample rate using polyphase resampling.
+
+    target_sr of 0 (or any rate at or above the source) returns the audio
+    untouched — that is how ultrasonic mode keeps everything above 24 kHz,
+    which the anti-alias filter would otherwise remove for good.
+    """
+    if target_sr <= 0 or sr <= target_sr:
         return audio, sr
     g = gcd(sr, target_sr)
     up = target_sr // g

@@ -18,7 +18,7 @@ from . import store
 from .classifier import ROLES
 from .config import (SENSITIVITY_PRESETS, ClipConfig, Config, DetectorConfig,
                      OSCConfig, PhenologyConfig, VideoConfig,
-                     apply_sensitivity)
+                     apply_sensitivity, apply_ultrasonic)
 
 STATE_PATH = Path.home() / ".bioacoustics_wizard.json"
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -264,6 +264,15 @@ def flow_detect(state: dict) -> None:
         print(warn(f"No WAV files found in {source}"))
         return
 
+    # Only raise ultrasound when the recordings can actually contain it.
+    if _max_sample_rate(wav_files) > 96000:
+        print(warn("\n  These recordings were made above 96 kHz, so they may "
+                   "carry bat echolocation."))
+        print(dim("  Normal analysis downsamples to 48 kHz and discards "
+                  "everything above 24 kHz."))
+        if ask_bool("Analyse at the native rate to keep ultrasound?", True):
+            apply_ultrasonic(config)
+
     _warn_if_no_ffmpeg(make_video or make_poster or make_gif)
 
     summary = [
@@ -276,6 +285,8 @@ def flow_detect(state: dict) -> None:
         ("media", ", ".join(filter(None, [
             "video" if make_video else "", "still" if make_poster else "",
             "gif" if make_gif else "", "reels" if make_reels else ""])) or "none"),
+        ("analysis band", "native rate, incl. ultrasound" if config.ultrasonic
+         else "0-24 kHz (48 kHz analysis)"),
         ("phenology", "yes" if build_phenology else "no"),
     ]
 
@@ -708,6 +719,19 @@ def flow_doctor(state: dict) -> None:
     from .cli import cmd_doctor
     import argparse
     cmd_doctor(argparse.Namespace())
+
+
+def _max_sample_rate(wav_files: list[str]) -> int:
+    """Highest sample rate across a set of recordings (0 if unreadable)."""
+    import soundfile as sf
+
+    best = 0
+    for path in wav_files[:50]:  # a sample is enough to spot an ultrasonic deployment
+        try:
+            best = max(best, sf.info(path).samplerate)
+        except Exception:  # noqa: BLE001 - a bad file should not stop the flow
+            continue
+    return best
 
 
 def _warn_if_no_ffmpeg(wants_media: bool) -> None:

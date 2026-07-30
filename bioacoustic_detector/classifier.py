@@ -31,6 +31,7 @@ ROLES = {
     "alarm_or_alert": DOMAIN_BIOPHONY,
     "insect_chorus": DOMAIN_BIOPHONY,
     "amphibian_assembly": DOMAIN_BIOPHONY,
+    "bat_echolocation": DOMAIN_BIOPHONY,
     # Geophonic elements (Voice of the Earth)
     "rain_event": DOMAIN_GEOPHONY,
     "wind_event": DOMAIN_GEOPHONY,
@@ -43,6 +44,78 @@ ROLES = {
     "activity_to_silence": DOMAIN_TRANSITION,
     "community_shift": DOMAIN_TRANSITION,
 }
+
+
+# --- Rule thresholds -------------------------------------------------------
+#
+# These are the knobs that decide which role an event gets. They are stated
+# here rather than inline because they are calibration parameters, not
+# implementation details: they encode assumptions about a site that should be
+# checked against real recordings before the labels are trusted in bulk.
+#
+# Measured on synthetic band-limited rain noise (60-1900 Hz) during testing:
+# flatness came out at 0.21 and 0.29, i.e. below GEOPHONY_FLATNESS, so the
+# rain/wind/water rules never fired and the events fell through to the
+# transition and fallback rules. Two properties of the features explain it and
+# both matter when calibrating:
+#
+#   * Spectral flatness is computed across the WHOLE spectrum, so a signal that
+#     is perfectly noise-like inside its own band still scores low when it
+#     occupies only part of the range. It measures "is this recording noisy",
+#     not "is this event noisy".
+#   * Spectral centroid is magnitude-weighted over the whole spectrum, so a
+#     wide low-level noise floor pulls it upward. The same rain events above
+#     reported centroids of 6.5 and 7.7 kHz despite having no energy at all
+#     above 2 kHz, which is why the anthrophony rule (centroid < 1500) also
+#     missed them.
+#
+# Neither is a bug in the arithmetic; they are the documented behaviour of
+# global spectral descriptors applied to band-limited events. Retuning these
+# numbers against annotated field recordings is the intended fix.
+
+GEOPHONY_FLATNESS = 0.30       # above this, a geophony-dominant event is "noise-like"
+ANTHROPHONY_FLATNESS = 0.15    # above this, with a low centroid, suspect machinery
+ANTHROPHONY_CENTROID_HZ = 1500
+AIRCRAFT_CENTROID_HZ = 800
+TONAL_FLATNESS = 0.15          # below this, treat as tonal (amphibian, territorial)
+TERRITORIAL_FLATNESS = 0.20
+TRANSITION_RISE = 5.0          # flux ratio vs previous event -> silence_to_activity
+TRANSITION_FALL = 0.2          # flux ratio vs previous event -> activity_to_silence
+RAIN_MIN_DURATION_S = 30.0
+WIND_MIN_DURATION_S = 10.0
+COMMUNITY_SHIFT_BANDS = 3      # active bands needed to call it a community shift
+COMMUNITY_SHIFT_DOMINANCE = 0.4  # ...and no single band may exceed this share
+
+
+def is_ultrasonic_band(band: str) -> bool:
+    """
+    True for any band above the audible range, in either band table.
+
+    Band names differ between the audible table ("ultrasonic") and the
+    ultrasonic table ("ultrasonic_low/mid/high"), so match on the prefix rather
+    than on an exact name — otherwise every rule silently stops firing the
+    moment someone enables ultrasonic mode.
+    """
+    return band.startswith("ultrasonic")
+
+
+def is_bat_band(band: str) -> bool:
+    """
+    True only for the resolved bat bands of the ultrasonic table.
+
+    Deliberately narrower than is_ultrasonic_band(). The audible table's top
+    band is also called "ultrasonic", but it covers 16-24 kHz — which at a
+    48 kHz analysis rate is mostly katydids and cicadas, and is the ceiling of
+    what that rate can represent rather than evidence of echolocation. Calling
+    those events bat passes at 0.8 confidence would be overclaiming; only the
+    native-rate bands (ultrasonic_low/mid/high) support that reading.
+    """
+    return band.startswith("ultrasonic_")
+
+
+def is_high_band(band: str) -> bool:
+    """True for the top of the audible range and anything above it."""
+    return band == "biophony_high" or is_ultrasonic_band(band)
 
 
 @dataclass
@@ -112,19 +185,19 @@ def _classify_features(hour: int, duration: float,
     # Transition detection: large flux change from previous event
     if prev_event_flux is not None:
         flux_ratio = peak_flux / max(prev_event_flux, 1e-10)
-        if flux_ratio > 5.0:
+        if flux_ratio > TRANSITION_RISE:
             return ("silence_to_activity", 0.7,
                     f"Flux increased {flux_ratio:.1f}x from previous event")
-        if flux_ratio < 0.2:
+        if flux_ratio < TRANSITION_FALL:
             return ("activity_to_silence", 0.7,
                     f"Flux decreased to {flux_ratio:.2f}x of previous event")
 
     # Geophonic: noise-like (high flatness) + low frequency dominance
-    if flatness > 0.3 and dominant_band == "geophony":
-        if duration > 30:
+    if flatness > GEOPHONY_FLATNESS and dominant_band == "geophony":
+        if duration > RAIN_MIN_DURATION_S:
             return ("rain_event", 0.75,
                     f"Broadband noise (flatness={flatness:.2f}) in geophony band, long duration")
-        elif duration > 10:
+        elif duration > WIND_MIN_DURATION_S:
             return ("wind_event", 0.65,
                     f"Broadband noise in geophony band, moderate duration")
         else:
@@ -132,13 +205,26 @@ def _classify_features(hour: int, duration: float,
                     f"Noise-like signal in geophony band")
 
     # Anthrophonic: low frequency + moderate flatness + specific patterns
-    if dominant_band == "geophony" and flatness > 0.15 and centroid < 1500:
+    if (dominant_band == "geophony" and flatness > ANTHROPHONY_FLATNESS
+            and centroid < ANTHROPHONY_CENTROID_HZ):
         if duration > 20:
             return ("mechanical_intrusion", 0.6,
                     f"Low-frequency sustained noise (centroid={centroid:.0f}Hz)")
-        elif 5 < duration < 60 and centroid < 800:
+        elif 5 < duration < 60 and centroid < AIRCRAFT_CENTROID_HZ:
             return ("aircraft_passage", 0.55,
                     f"Low-frequency passage pattern (centroid={centroid:.0f}Hz)")
+
+    # Bats: energy centred above the audible range. Checked before the diel
+    # rules because echolocation is unambiguous from its band alone — no bird,
+    # frog or engine puts its dominant energy above 16 kHz.
+    if is_bat_band(dominant_band):
+        if duration < 5:
+            return ("bat_echolocation", 0.8,
+                    f"Brief ultrasonic pulse train in {dominant_band} "
+                    f"(centroid={centroid:.0f}Hz)")
+        return ("bat_echolocation", 0.65,
+                f"Sustained ultrasonic activity in {dominant_band} — "
+                f"a foraging bout or several passes")
 
     # Biophonic classification by time of day and frequency
     # Dawn chorus: 4:30-7:00, mid-frequency birds
@@ -153,10 +239,10 @@ def _classify_features(hour: int, duration: float,
 
     # Nocturnal voices: 20:00-4:00
     if hour >= 20 or hour < 4:
-        if dominant_band == "biophony_low" and flatness < 0.15:
+        if dominant_band == "biophony_low" and flatness < TONAL_FLATNESS:
             return ("amphibian_assembly", 0.7,
                     f"Low-frequency tonal signals at night (flatness={flatness:.2f})")
-        if dominant_band in ("biophony_high", "ultrasonic"):
+        if is_high_band(dominant_band):
             return ("nocturnal_voice", 0.65,
                     f"High-frequency nocturnal activity")
         if dominant_band == "biophony_mid":
@@ -164,12 +250,13 @@ def _classify_features(hour: int, duration: float,
                     f"Mid-frequency nocturnal activity")
 
     # Insect chorus: high frequency, high flatness, sustained
-    if dominant_band in ("biophony_high", "ultrasonic") and duration > 10:
+    if is_high_band(dominant_band) and duration > 10:
         return ("insect_chorus", 0.7,
                 f"Sustained high-frequency activity (band={dominant_band})")
 
     # Amphibian assembly: low biophony, tonal, often sustained
-    if dominant_band == "biophony_low" and flatness < 0.15 and duration > 5:
+    if (dominant_band == "biophony_low" and flatness < TONAL_FLATNESS
+            and duration > 5):
         return ("amphibian_assembly", 0.65,
                 f"Tonal low-frequency sustained activity")
 
@@ -179,13 +266,15 @@ def _classify_features(hour: int, duration: float,
                 f"Short, intense mid-frequency event")
 
     # Territorial: mid-frequency, moderate duration, tonal
-    if dominant_band == "biophony_mid" and flatness < 0.2 and 2 < duration < 30:
+    if (dominant_band == "biophony_mid" and flatness < TERRITORIAL_FLATNESS
+            and 2 < duration < 30):
         return ("territorial_announcement", 0.55,
                 f"Tonal mid-frequency vocalization")
 
     # Community shift: multiple bands active
     active_bands = sum(1 for v in band_energies.values() if v > 0)
-    if active_bands >= 3 and dominant_ratio < 0.4:
+    if (active_bands >= COMMUNITY_SHIFT_BANDS
+            and dominant_ratio < COMMUNITY_SHIFT_DOMINANCE):
         return ("community_shift", 0.45,
                 f"Energy spread across {active_bands} bands")
 
@@ -193,7 +282,7 @@ def _classify_features(hour: int, duration: float,
     if dominant_band in ("biophony_mid", "biophony_low"):
         return ("territorial_announcement", 0.3,
                 f"Unspecified biophonic event in {dominant_band}")
-    if dominant_band in ("biophony_high", "ultrasonic"):
+    if is_high_band(dominant_band):
         return ("insect_chorus", 0.3,
                 f"Unspecified high-frequency biophonic event")
 

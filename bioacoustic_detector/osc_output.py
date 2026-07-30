@@ -33,13 +33,17 @@ from .phenology import CV_FIELDS
 VOCT_REF_HZ = 261.63  # Middle C
 VOCT_REF_V = 0.0
 
-# ILDA color mapping for frequency bands
+# ILDA color mapping for frequency bands. Covers both band tables, so a laser
+# patch keeps working when a site is re-analysed in ultrasonic mode.
 ILDA_BAND_COLORS = {
-    "geophony": 1,       # Red
-    "biophony_low": 2,   # Green
-    "biophony_mid": 3,   # Blue
-    "biophony_high": 4,  # Yellow
-    "ultrasonic": 5,     # Cyan
+    "geophony": 1,          # Red
+    "biophony_low": 2,      # Green
+    "biophony_mid": 3,      # Blue
+    "biophony_high": 4,     # Yellow
+    "ultrasonic": 5,        # Cyan  (audible band table)
+    "ultrasonic_low": 5,    # Cyan
+    "ultrasonic_mid": 6,    # Magenta
+    "ultrasonic_high": 7,   # White
 }
 
 

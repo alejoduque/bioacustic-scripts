@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import ClipConfig, VideoConfig
-from .media import (OverlayTexts, TextOverlay, concat_videos, find_font,
-                    have_ffmpeg, run_ffmpeg, video_to_gif)
+from .media import (OverlayTexts, TextOverlay, can_draw_text, concat_videos,
+                    find_font, have_ffmpeg, run_ffmpeg, video_to_gif)
 
 
 @dataclass
@@ -72,10 +72,20 @@ def _render_spectrogram_video(wav_path: str, output_path: str,
                               overlays: list[TextOverlay],
                               color: str,
                               config: VideoConfig) -> tuple[bool, str]:
-    """Render a scrolling spectrogram video with the given text overlays."""
+    """
+    Render a scrolling spectrogram video with the given text overlays.
+
+    Overlays are dropped when the ffmpeg build has no drawtext filter (it needs
+    libfreetype, which Homebrew's stock bottle omits). The spectrogram, its
+    frequency legend and the audio are unaffected — only the burned-in caption
+    is lost, and the same information stays in the filename, the gallery card,
+    the report and events.json.
+    """
+    draw_text = config.overlay_text and can_draw_text()
+
     with OverlayTexts(config.font_file) as texts:
         chain = _spectrum_filter(config, color)
-        if config.overlay_text:
+        if draw_text:
             for overlay in overlays:
                 if overlay.text:
                     chain += "," + texts.filter_for(overlay)
@@ -122,12 +132,10 @@ def render_clip_video(clip_path: str, output_path: str, event: dict,
         TextOverlay(
             text=f"{role} ({confidence:.0%}) | {band}",
             x="25", y="H-th-25", font_size=config.label_font_size,
-            color="yellow", box_color="black@0.6", box_border=3,
         ),
         TextOverlay(
             text=f"NDSI {event.get('ndsi', 0):+.2f}  ACI {event.get('aci', 0):.1f}",
             x="W-tw-25", y="H-th-25", font_size=config.label_font_size - 4,
-            color="white", box_color="black@0.6", box_border=3,
         ),
     ]
 
@@ -221,6 +229,15 @@ def render_all_clips(clip_paths: list[str], events: list[dict],
     if not video_config.font_file:
         video_config.font_file = find_font()
 
+    if (progress and clip_config.make_video and video_config.overlay_text
+            and not can_draw_text()):
+        print("    Note: this ffmpeg has no drawtext filter, so clip videos "
+              "carry no burned-in label.")
+        print("          Spectrogram, legend and audio are unaffected; the "
+              "role and date stay in the")
+        print("          filename, gallery and report. For labels: "
+              "brew install ffmpeg-full")
+
     renders = []
     total = len(clip_paths)
     for i, (clip_path, event) in enumerate(zip(clip_paths, events), start=1):
@@ -295,8 +312,10 @@ def whole_file_video(wav_path: str, output_path: str = "",
 
 
 def check_renderer() -> tuple[bool, str]:
-    """Report whether video rendering is available, and with which font."""
+    """Report whether video rendering is available, and how complete it is."""
     if not have_ffmpeg():
         return False, "ffmpeg not found on PATH"
+    if not can_draw_text():
+        return True, "ffmpeg ready, but no drawtext filter (no burned-in labels)"
     font = find_font()
-    return True, f"ffmpeg ready (font: {font or 'fontconfig default'})"
+    return True, f"ffmpeg ready with labels (font: {font or 'fontconfig default'})"
