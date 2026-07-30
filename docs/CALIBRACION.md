@@ -44,6 +44,44 @@ El costo es almacenamiento, batería y tiempo de análisis a la vez: un desplieg
 
 ---
 
+## Primeros resultados externos (2026-07-30, antes de datos de campo)
+
+El Asunto 2 ya no tiene que esperar a La Luna. `alp-data` expone **AnuraSet** —27 h de anuros neotropicales anotados por expertos en dos biomas brasileños— y el detector puede evaluarse contra ese corpus hoy mismo:
+
+```bash
+~/.bioacoustic_detector_venv/bin/pip install alp-data     # dependencia opcional
+./bioacoustics.sh validate --dataset anuraset --limit 25 --sweep
+```
+
+**25 grabaciones, 266 anotaciones expertas** (mediana 0.61 s, 75 % más cortas que 2 s).
+
+| | configuración | detecciones | precisión | exhaustividad | F1 |
+|---|---|---|---|---|---|
+| Por defecto | κ=2.5, mín. 2 s, fusión 5 s | 30 | 0.57 | 0.06 | **0.11** |
+| Mejor del barrido | κ=3, mín. 0.25 s, fusión 0.25 s | 399 | 0.23 | 0.35 | **0.28** |
+
+Emparejamiento por inicio con tolerancia de ±0.5 s, uno a uno. De aquí se desprenden tres cosas.
+
+**1. Los tiempos por defecto no pueden coincidir con este corpus, por construcción.** El 75 % de las anotaciones son más cortas que `min_event_duration = 2 s`. Una exhaustividad de 0.06 con los valores por defecto es un desajuste de unidades, no una falla del detector: nosotros respondemos "¿cuándo cambió el paisaje sonoro?" y quienes anotaron respondieron "¿dónde está cada canto?". Ajustar a escala de canto mejora el F1 en 2.4×, y precisión y exhaustividad se intercambian de forma continua a lo largo de la grilla (κ=1.5, mín. 0.1 s alcanza exhaustividad 0.61 con precisión 0.14).
+
+**2. Un F1 ≈ 0.28 es el techo honesto de un detector de cambios genérico sobre coro denso.** Es una línea base que superar, no un resultado que defender. Un modelo entrenado para la tarea rendiría mucho mejor; ese es el argumento a favor de la ruta de rasgos aprendidos.
+
+**3. El hallazgo del clasificador es el importante — e invalida un supuesto, no un umbral.**
+
+De las 17 detecciones que coincidieron con una anotación bajo la configuración por defecto, **16 recibieron `dominant_band = geophony`** y por lo tanto cayeron a través de todas las reglas biofónicas hasta `community_shift`. Exactitud de dominio contra un corpus que es **enteramente anuro**: **6 %**.
+
+La causa es la tabla de bandas misma. `geophony` se define como 0–2 kHz, pero en estas grabaciones la banda por debajo de 2 kHz concentra el 97 % de la energía —ya sea por ranas que cantan grave, por agua y viento cerca de los cuerpos de agua, o por ambas cosas—. **La energía por banda por sí sola no puede separar una rana de una quebrada**, así que una regla anclada a la banda dominante asignará geofonía a un coro de anuros siempre.
+
+Esto no podía haberse encontrado con audio sintético. Los "anfibios" sintéticos del corpus de prueba se generaron entre 2.6 y 3.1 kHz —dentro de `biophony_low`— porque eso es lo que la tabla de bandas supone. El material de prueba y el código codificaban el mismo supuesto y se daban la razón mutuamente. Solo grabaciones anotadas externamente podían romper el empate.
+
+**Qué implica esto para las dos correcciones candidatas de abajo:** la opción (a), reajustar umbrales, no puede reparar esto — ningún umbral sobre `flatness` o `centroid` recupera una distinción que la tabla de bandas ya destruyó. El trabajo es la opción (b), y en concreto:
+
+- calcular planitud y centroide **dentro de la banda dominante**, para que "ruidoso" se juzgue respecto del evento y no de todo el espectro
+- agregar un rasgo de **estructura temporal**. Eso es lo que realmente separa los dos casos: un coro de anuros es periódico a la tasa de canto, la lluvia no lo es. La autocorrelación de la envolvente de banda, o el espectro de modulación, lo capturarían y son baratos de calcular con datos que ya están en memoria.
+- tratar la banda baja como **ambigua por defecto** en lugar de como geofonía, y dejar que el rasgo temporal resuelva
+
+---
+
 ## Asunto 2 — Los umbrales del clasificador están sin calibrar
 
 **La decisión.** Los umbrales numéricos al inicio de `bioacoustic_detector/classifier.py` que traducen rasgos medidos en roles ecológicos.

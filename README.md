@@ -412,6 +412,7 @@ The full address map is written next to your results as `osc_address_map.txt`, g
   gallery     rebuild the event-clip gallery from existing results
   media       spectrogram | poster | split | gif
   metadata    AudioMoth metadata report
+  validate    score the detector against externally annotated datasets
   doctor      check tooling and report what is available
   wizard      the guided front-end (default when run with no arguments)
 ```
@@ -750,6 +751,7 @@ bioacoustic_detector/
 - **ffmpeg** — optional but needed for spectrogram video, stills and GIFs. Without it you still get clips, `events.json`, OSC exports, the calendar and the reports; the pipeline says so and carries on. `brew install ffmpeg`.
 - **A drawtext-capable ffmpeg**, if you want captions burned into the clip videos. Homebrew's stock `ffmpeg` bottle is built without libfreetype and therefore has no `drawtext` filter, so labels are silently unavailable — spectrogram, legend, colours and audio are unaffected. `brew install ffmpeg-full` provides it; the toolkit prefers that build automatically, or set `FFMPEG_BIN=/path/to/ffmpeg` to choose your own.
 - Python packages (installed automatically into the managed venv): `numpy`, `scipy`, `soundfile`, `metamoth`, `python-osc`.
+- **Optional:** `alp-data` (Python 3.11+), only for `./bioacoustics.sh validate`. Nothing else imports it, and the command tells you how to install it if missing.
 
 `./bioacoustics.sh doctor` reports on all of the above.
 

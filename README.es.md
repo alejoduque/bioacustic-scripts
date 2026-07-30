@@ -414,6 +414,7 @@ El mapa completo de direcciones se escribe junto a los resultados como `osc_addr
   gallery     reconstruir la galería a partir de resultados existentes
   media       spectrogram | poster | split | gif
   metadata    reporte de metadatos AudioMoth
+  validate    evaluar el detector contra corpus anotados externamente
   doctor      revisar herramientas y reportar qué hay disponible
   wizard      la interfaz guiada (por defecto si no se pasan argumentos)
 ```
@@ -754,6 +755,7 @@ bioacoustic_detector/
 - **ffmpeg** — opcional, pero necesario para video de espectrograma, imágenes fijas y GIFs. Sin él igual se obtienen clips, `events.json`, exportaciones OSC, el calendario y los reportes; el pipeline lo dice y continúa. `brew install ffmpeg`.
 - **Un ffmpeg con `drawtext`**, si quiere leyendas incrustadas en los videos. El paquete estándar de Homebrew se compila sin libfreetype y por tanto no tiene el filtro `drawtext`, así que las leyendas quedan silenciosamente indisponibles — el espectrograma, la leyenda de ejes, los colores y el audio no se ven afectados. `brew install ffmpeg-full` lo provee; la herramienta prefiere esa compilación automáticamente, o defina `FFMPEG_BIN=/ruta/a/ffmpeg` para elegir la suya.
 - Paquetes de Python (instalados automáticamente en el entorno gestionado): `numpy`, `scipy`, `soundfile`, `metamoth`, `python-osc`.
+- **Opcional:** `alp-data` (Python 3.11+), solo para `./bioacoustics.sh validate`. Ningún otro módulo lo importa, y el comando indica cómo instalarlo si falta.
 
 `./bioacoustics.sh doctor` informa sobre todo lo anterior.
 

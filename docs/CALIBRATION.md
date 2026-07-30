@@ -44,6 +44,44 @@ Cost is storage, battery and analysis time together — a 192 kHz deployment fil
 
 ---
 
+## First external results (2026-07-30, before any field data)
+
+Item 2 no longer has to wait for La Luna. `alp-data` exposes **AnuraSet** — 27 h of expert-annotated neotropical anurans from two Brazilian biomes — and the detector can be scored against it today:
+
+```bash
+~/.bioacoustic_detector_venv/bin/pip install alp-data     # optional dependency
+./bioacoustics.sh validate --dataset anuraset --limit 25 --sweep
+```
+
+**25 recordings, 266 expert annotations** (median 0.61 s, 75 % shorter than 2 s).
+
+| | config | detections | precision | recall | F1 |
+|---|---|---|---|---|---|
+| Defaults | κ=2.5, min 2 s, merge 5 s | 30 | 0.57 | 0.06 | **0.11** |
+| Best of sweep | κ=3, min 0.25 s, merge 0.25 s | 399 | 0.23 | 0.35 | **0.28** |
+
+Onset-matched at ±0.5 s, one-to-one. Three things follow.
+
+**1. The default timings cannot match this corpus, by construction.** 75 % of annotations are shorter than `min_event_duration = 2 s`. Recall of 0.06 at defaults is a units mismatch, not a detector failure — we answer "when did the soundscape change?", the annotators answered "where is every call?". Tuning to call scale improves F1 2.4×, and precision/recall trade smoothly across the grid (κ=1.5, min 0.1 s reaches recall 0.61 at precision 0.14).
+
+**2. F1 ≈ 0.28 is the honest ceiling of a generic change detector on dense chorus.** It is a baseline to beat, not a result to defend. A model trained for the task would do far better; that is the argument for the learned-feature route.
+
+**3. The classifier finding is the important one — and it invalidates an assumption, not a threshold.**
+
+Of the 17 detections that matched an annotation under default settings, **16 were assigned `dominant_band = geophony`**, and therefore fell through every biophonic rule to `community_shift`. Domain accuracy against a corpus that is *entirely anuran*: **6 %**.
+
+The cause is the band table itself. `geophony` is defined as 0–2 kHz, but on these recordings the sub-2 kHz band holds 97 % of the energy — whether from frogs calling low, from water and wind near the ponds, or both. **Band energy alone cannot separate a frog from a stream**, so a rule keyed on the dominant band will assign geophony to an anuran chorus every time.
+
+This could not have been found on synthetic audio. The synthetic "amphibians" in the test corpus were generated at 2.6–3.1 kHz — inside `biophony_low` — because that is what the band table assumes. The fixture and the code encoded the same assumption and agreed with each other. Only externally annotated recordings could break the tie.
+
+**What this implies for the two candidate fixes below:** option (a), retuning thresholds, cannot repair this — no threshold on `flatness` or `centroid` recovers a distinction that the band table has already destroyed. The work is option (b), and specifically:
+
+- compute flatness and centroid **within the dominant band**, so "noisy" is judged relative to the event rather than the whole spectrum
+- add a **temporal-structure** feature. This is what actually separates the two cases: an anuran chorus is periodic at call rate, rain is not. Autocorrelation of the band envelope, or the modulation spectrum, would carry that and is cheap to compute from data already in memory.
+- treat the low band as **ambiguous by default** rather than as geophony, and let the temporal feature resolve it
+
+---
+
 ## Open item 2 — Classifier thresholds are uncalibrated
 
 **The decision.** The numeric thresholds at the top of `bioacoustic_detector/classifier.py` that map measured features onto ecological roles.

@@ -30,7 +30,7 @@ from .config import (SENSITIVITY_PRESETS, ClipConfig, Config, DetectorConfig,
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUBCOMMANDS = ("detect", "phenology", "osc", "gallery", "media", "metadata",
-               "doctor", "wizard")
+               "validate", "doctor", "wizard")
 DOMAINS = ("biophony", "geophony", "anthrophony", "transition")
 
 
@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_gallery_parser(sub)
     _add_media_parser(sub)
     _add_metadata_parser(sub)
+    _add_validate_parser(sub)
     sub.add_parser("doctor", help="check ffmpeg/python/deps and report status")
     sub.add_parser("wizard", help="interactive guided front-end")
 
@@ -211,6 +212,34 @@ def _add_media_parser(sub) -> None:
     p.add_argument("--max-freq", type=int, default=10000,
                    help="spectrogram: max frequency in Hz")
     p.add_argument("--color", default="cool", help="spectrogram: ffmpeg colormap")
+
+
+def _add_validate_parser(sub) -> None:
+    p = sub.add_parser(
+        "validate", help="score the detector against externally annotated data",
+        description="Measure precision and recall against datasets someone "
+                    "else annotated, via the optional 'alp-data' package. "
+                    "This is the only way to get numbers that are not circular.")
+    p.add_argument("--dataset", default="anuraset",
+                   help="Reference dataset (default: anuraset)")
+    p.add_argument("--limit", type=int, default=20,
+                   help="How many recordings to score, sampled evenly across "
+                        "the corpus rather than from the front (default: 20)")
+    p.add_argument("--sweep", action="store_true",
+                   help="Score a grid of detector settings instead of just the "
+                        "defaults. Costs almost nothing extra: the spectral "
+                        "analysis is cached per file.")
+    p.add_argument("--onset-tolerance", type=float, default=0.5,
+                   help="Seconds within which a detection counts as matching "
+                        "an annotated onset (default: 0.5)")
+    p.add_argument("--min-iou", type=float, default=0.2,
+                   help="Overlap needed for the IoU-based match (default: 0.2)")
+    p.add_argument("--data-root", default="",
+                   help="Local copy of the dataset, if you have one")
+    p.add_argument("-o", "--output", default="",
+                   help="Write the full report as JSON")
+    p.add_argument("--list", action="store_true",
+                   help="List available reference datasets and exit")
 
 
 def _add_metadata_parser(sub) -> None:
@@ -506,6 +535,43 @@ def cmd_metadata(args: argparse.Namespace) -> int:
                            cwd=str(script.parent))
 
 
+def cmd_validate(args: argparse.Namespace) -> int:
+    from .validate import (INSTALL_HINT, REFERENCE_DATASETS, print_report, run,
+                           write_report)
+
+    if args.list:
+        print("Reference datasets (strongly-labelled, via alp-data):\n")
+        for name, spec in REFERENCE_DATASETS.items():
+            print(f"  {name}")
+            print(f"      {spec['notes']}")
+            print(f"      alp_data.{spec['class']}, split={spec['split']!r}, "
+                  f"{spec['sample_rate']} Hz\n")
+        return 0
+
+    if args.dataset not in REFERENCE_DATASETS:
+        print(f"Unknown dataset {args.dataset!r}. "
+              f"Available: {', '.join(REFERENCE_DATASETS)}")
+        return 2
+
+    print(f"Loading {args.dataset} (first run downloads audio; "
+          f"{args.limit} recordings)...")
+    try:
+        report = run(dataset=args.dataset, limit=args.limit, sweep=args.sweep,
+                     onset_tolerance_s=args.onset_tolerance,
+                     min_iou=args.min_iou, data_root=args.data_root)
+    except ImportError:
+        print(INSTALL_HINT)
+        return 1
+    except Exception as exc:  # noqa: BLE001 - network/data errors are expected
+        print(f"Validation failed: {exc}")
+        return 1
+
+    print_report(report)
+    if args.output:
+        print(f"\nWrote {write_report(report, args.output)}")
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     from .media import (can_draw_text, ffmpeg_path, find_font, has_filter,
                         have_ffmpeg)
@@ -566,6 +632,7 @@ HANDLERS = {
     "gallery": cmd_gallery,
     "media": cmd_media,
     "metadata": cmd_metadata,
+    "validate": cmd_validate,
     "doctor": cmd_doctor,
     "wizard": cmd_wizard,
 }
