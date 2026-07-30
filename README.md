@@ -1,95 +1,329 @@
 # Bioacoustic Scripts
 
-A toolkit for processing, analyzing, and visualizing AudioMoth field recordings. Includes spectral analysis tools, spectrogram generators, and an intelligent acoustic event detector built on deep ecology principles.
+A toolkit for turning AudioMoth field recordings into **phenological data that can be driven over OSC**.
+
+It listens for moments when the soundscape changes — a species starting up, rain arriving, the dawn chorus turning over — cuts a short video clip of each one, classifies it by ecological role, and accumulates those events into a dated calendar that an instrument can follow: Eurorack, ILDA laser, SuperCollider, anything that speaks OSC.
 
 **Live gallery:** https://etc.altred.xyz/staticbioacustics/index.html
 
 ---
 
-## Bioacoustic Event Detector
+## How to run
 
-The centerpiece of this toolkit. An intelligent acoustic event detection system that analyzes the frequency spectrum of AudioMoth WAV recordings over time, identifies meaningful spectral shifts (species transitions, new vocalizations, weather changes), and produces clips only around those events — each with a spectrogram video, ecological classification, OSC output for modular synthesis, and a phenological calendar.
-
-### Philosophy: Parliament of the Living
-
-The classification framework draws from **deep ecology** and the concept of a **parliament of the living**: all acoustic participants — biological, geological, and human — have inherent ecological value and are cataloged by their role in the soundscape, not by human utility. Every detected event is a "voice" in this parliament, and the system measures acoustic democracy through Shannon entropy of role distribution.
-
-### Architecture
-
-A Python package (`bioacoustic_detector/`) with a bash wrapper (`detect_events.sh`) following the project convention. Dependencies: numpy, scipy, soundfile, metamoth, python-osc.
-
-```
-bioacoustic_detector/
-  __init__.py          # Package init
-  config.py            # All tunable parameters
-  spectral.py          # STFT, spectral flux, centroid, flatness, band energies
-  detector.py          # Adaptive-threshold event detection
-  classifier.py        # Deep ecology taxonomy & classification
-  indices.py           # Ecoacoustic indices (ACI, BIO, NDSI, ADI, AEI)
-  clipper.py           # WAV clip extraction with pre/post-roll
-  video.py             # ffmpeg spectrogram MP4 generation
-  metadata.py          # AudioMoth metadata via metamoth + path-based habitat/season
-  report.py            # HTML report with Plotly.js
-  phenology.py         # Phenological calendar from cross-recording acoustic patterns
-  osc_output.py        # OSC message generation for Eurorack, ILDA, SuperCollider
-  cli.py               # CLI entry point
-```
-
-### Quick Start
+### First time
 
 ```bash
-# Single file
-./detect_events.sh path/to/recording.WAV
-
-# Entire directory (recursive)
-./detect_events.sh path/to/recordings/
-
-# With phenological calendar (requires multiple recordings)
-./detect_events.sh path/to/recordings/ --phenology
-
-# JSON-only analysis (no clips, no video)
-./detect_events.sh path/to/recording.WAV --json-only
-
-# Custom sensitivity
-./detect_events.sh path/to/recording.WAV --threshold 1.5 --pre-roll 30
+git clone git@github.com:alejoduque/bioacustic-scripts.git
+cd bioacustic-scripts
+chmod +x bioacoustics.sh detect_events.sh
+./bioacoustics.sh
 ```
 
-The bash wrapper automatically creates a Python virtual environment at `~/.bioacoustic_detector_venv` and installs all dependencies on first run. No manual setup required.
+That's the whole setup. On first launch the script finds a Python 3.10+ interpreter, creates a virtualenv at `~/.bioacoustic_detector_venv`, and installs `numpy`, `scipy`, `soundfile`, `metamoth` and `python-osc` into it. Takes a minute or two once; every later run starts immediately. Nothing is installed system-wide and nothing else needs configuring.
 
-### CLI Options
+Two things worth knowing before you start:
 
-```
-./detect_events.sh <WAV_FILE_OR_DIR> [options]
+- **ffmpeg is optional but recommended.** Without it you still get clips, `events.json`, OSC exports, the calendar and the reports — but no spectrogram video, stills or GIFs. `brew install ffmpeg` (macOS) or `sudo apt install ffmpeg` (Debian/Ubuntu).
+- **Recording filenames matter for phenology.** The AudioMoth `YYYYMMDD_HHMMSS.WAV` format is how the toolkit knows when each recording was made. Files named otherwise still produce events and clips, but they cannot be placed on a calendar.
 
-  -o, --output-dir         Output directory (default: ./detected_events)
-  --threshold              Spectral flux threshold in MAD units (default: 2.5)
-  --pre-roll               Seconds before event onset in clips (default: 20)
-  --baseline-window        Baseline window in seconds (default: 60)
-  --min-event-duration     Minimum event duration in seconds (default: 2)
-  --max-freq               Max frequency Hz for analysis/video (default: 10000)
-  --no-video               Skip spectrogram MP4 generation
-  --json-only              Output JSON metadata only (no clips, video, or reports)
+Check your environment at any time:
 
-  # OSC options
-  --osc-live               Replay events as live OSC messages to target host
-  --osc-host               OSC target host (default: 127.0.0.1)
-  --osc-port               OSC target port (default: 57120, SuperCollider default)
-  --no-osc                 Skip OSC/SuperCollider output generation
-
-  # Phenology options
-  --phenology              Generate phenological calendar (requires multiple recordings)
+```bash
+./bioacoustics.sh doctor
 ```
 
-### Spectral Analysis
+### The guided way
 
-The detector computes a Short-Time Fourier Transform (STFT) with frame_size=2048, hop=512 (75% overlap), Hann window. At 48kHz this gives ~23Hz frequency resolution and ~10.7ms time resolution — sufficient for bird syllables (50-200ms). Recordings above 48kHz are downsampled to 48kHz for detection, but clips preserve the original sample rate.
+```bash
+./bioacoustics.sh
+```
 
-**Spectral features extracted per frame:**
+One entry point, one menu:
 
-- **Spectral flux** — half-wave rectified L2-norm measuring the rate of spectral change between consecutive frames. This is the primary event detection signal.
-- **Spectral centroid** — the "center of mass" of the spectrum in Hz. Maps to perceived brightness/pitch.
-- **Spectral flatness** (Wiener entropy) — ratio of geometric to arithmetic mean of the power spectrum. 1.0 = white noise, 0.0 = pure tone. Distinguishes tonal vocalizations from broadband noise.
-- **Band energies** for 6 ecological frequency bands:
+```
+ 1  Detect events and cut video clips      the core pipeline — start here
+ 2  Phenological calendar                  dated ecological series + OSC exports
+ 3  OSC                                    stream, serve or export for instruments
+ 4  Event clip gallery                     browse the clips by event type
+ 5  AudioMoth metadata report              headers, temperature, battery
+ 6  Media utilities                        whole-file spectrogram, GIF, split
+ 7  HDR photo batch (DJI DNG)              bracketed stills from the same surveys
+ 8  Environment check                      what is installed
+```
+
+Each option explains what it does, then asks only what it cannot infer — where your recordings are, how sensitive detection should be, which kinds of event you want clips of, whether to render video. Defaults are shown in brackets, so Enter accepts them. Before anything runs you get a plan to confirm:
+
+```
+Plan
+    recordings : 11 file(s)
+        output : ./detected_events
+   sensitivity : balanced (threshold 2.5 MAD)
+  clip padding : -20s / +10s
+       domains : all
+   event types : all
+         media : video, still, reels
+     phenology : yes
+
+Run this? (Y/n)
+```
+
+Answers persist to `~/.bioacoustics_wizard.json`, so the second session is mostly pressing Enter. Typing `q` inside a flow returns to the menu; `q` at the menu quits. Nothing is destructive — every flow writes into an output folder you choose.
+
+### The direct way
+
+Every feature is also a subcommand, for scripting and repeat runs:
+
+```bash
+# Analyse a folder: event clips, videos, OSC, calendar, gallery
+./detect_events.sh recordings/ --phenology
+
+# Same thing spelled out
+./bioacoustics.sh detect recordings/ --phenology -o ./results
+
+# One recording, more sensitive, no video
+./detect_events.sh recordings/20250315_053000.WAV --sensitivity subtle --no-video
+
+# Only rain and wind, with GIF previews
+./detect_events.sh recordings/ --domains geophony --gif
+
+# Stream the calendar to an instrument, one day per second, on repeat
+./bioacoustics.sh osc phenology ./results --loop
+
+# Let the instrument query instead: answers /phenology/query/*
+./bioacoustics.sh osc serve ./results --listen-port 57121
+
+# Rebuild outputs without re-analysing the audio
+./bioacoustics.sh phenology ./results
+./bioacoustics.sh gallery ./results
+```
+
+Help for any subcommand:
+
+```bash
+./bioacoustics.sh --help
+./bioacoustics.sh detect --help
+```
+
+A path as the first argument is shorthand for `detect`, so `./detect_events.sh rec.WAV --threshold 1.5` works as it always did.
+
+### Four typical workflows
+
+**Survey a single card of recordings.** Detection is the expensive step; everything else reads its output.
+
+```bash
+./detect_events.sh /Volumes/AUDIOMOTH/ -o ./luna_marzo --phenology
+open ./luna_marzo/gallery.html          # browse the clips by event type
+open ./luna_marzo/summary_report.html   # the batch at a glance
+```
+
+**Tune sensitivity before committing to a long run.** `--json-only` reports what would be detected without writing clips or rendering video — the same analysis, a fraction of the time and disk once ffmpeg is in play. (In one test of 11 × 100 s recordings: 80 KB of JSON instead of 155 MB of media.)
+
+```bash
+./detect_events.sh recordings/ --sensitivity salient --json-only -o /tmp/probe
+./detect_events.sh recordings/ --sensitivity subtle  --json-only -o /tmp/probe2
+# compare the event counts, then re-run for real with the setting you liked
+```
+
+Spectral analysis is the fixed cost and runs either way, so the saving is in the rendering, not the listening.
+
+**Follow a season phenologically.** Point it at everything you have; the calendar needs recordings from at least two days.
+
+```bash
+./detect_events.sh "Epoca lluvias/" -o ./season --phenology --days-per-second 2
+open ./season/phenological_calendar.html
+column -s, -t ./season/phenological_series.csv | less -S
+```
+
+**Drive an installation.** Analyse once, then stream or serve as often as you like.
+
+```bash
+./detect_events.sh season/ -o ./season --phenology
+cat ./season/osc_address_map.txt                      # what you'll receive
+./bioacoustics.sh osc phenology ./season --loop --host 192.168.1.40 --port 57120
+```
+
+---
+
+## Why events, not recordings
+
+Earlier versions rendered one scrolling spectrogram per recording. A twelve-second amphibian assembly inside an hour of tape is invisible that way, and there is nothing to point an instrument at.
+
+The pipeline now works per event:
+
+```
+audio → spectral features → adaptive-threshold detection → classification
+      → one clip per event (with context) → spectrogram video, still, GIF
+      → one reel per event type → events.json → OSC → report
+```
+
+and then across recordings:
+
+```
+results → phenological calendar → OSC score / live stream / query server
+        → event gallery → batch summary
+```
+
+Clips are filed by what they are, so each kind of voice gets its own folder of evidence:
+
+```
+detected_events/
+  20250315_053000/
+    events.json                     # full metadata: events, classifications, indices
+    events.osc                      # timed OSC bundle for this recording
+    events_score.scd                # SuperCollider score
+    report.html                     # per-recording report
+    clips/
+      biophony/dawn_chorus_participant/
+        event_003_dawn_chorus_participant_40.8s-45.8s.wav
+        event_003_dawn_chorus_participant_40.8s-45.8s.mp4
+        event_003_..._-spectrogram.png
+        event_003_..._-thumbnail.png
+      geophony/rain_event/…
+      transition/community_shift/…
+    reels/
+      reel_dawn_chorus_participant.mp4    # every clip of one type, concatenated
+  phenological_calendar.json        # the calendar, incl. per-day OSC frames
+  phenological_calendar.html        # heatmap, CV series, dawn drift, wavetable
+  phenological_series.csv           # one tidy row per day
+  phenology.osc                     # timed OSC bundle for the whole season
+  phenology_score.scd               # SuperCollider score for the season
+  osc_address_map.txt               # generated address reference
+  gallery.html                      # every clip, grouped by event type
+  summary_report.html               # the batch at a glance
+```
+
+Event videos are colour-coded by acoustic domain — biophony green, geophony cool, anthrophony fiery, transitions magma — and labelled with habitat, date, offset into the recording, ecological role, confidence, dominant band, NDSI and ACI.
+
+---
+
+## Phenological data over OSC
+
+This is the point of the toolkit. A season of recordings becomes a control stream.
+
+```bash
+# Replay 90 days of field recording in 90 seconds
+./bioacoustics.sh osc phenology detected_events/ --days-per-second 1
+
+# Installation mode: repeat until stopped
+./bioacoustics.sh osc phenology detected_events/ --loop --port 57120
+
+# Let the instrument ask instead of being pushed at
+./bioacoustics.sh osc serve detected_events/ --listen-port 57121
+```
+
+**Every scalar is sent twice** — the raw ecological value, then the same value scaled to 0–1 across the dataset — so a patch can take absolute numbers or a control voltage without knowing the season's range:
+
+```
+/phenology/day              0  "2025-03-10"  69          index, date, day of year
+/phenology/day/activity     5.0   1.0                    events per recording, cv
+/phenology/day/richness     8.0   1.0                    distinct roles, cv
+/phenology/day/biophony     0.75  0.75                   share of events, cv
+/phenology/day/ndsi         0.93  0.96                   soundscape index, cv
+/phenology/day/dawn         330.7 0.70                   dawn chorus onset (min), cv
+/phenology/day/hourly       0 0 0 0 0 6 0 …              24 ints
+/phenology/day/role         "amphibian_assembly" 4 0.20  role, count, share
+/phenology/event            "breeding_chorus_onset" "2025-03-14" 73  2.1
+/phenology/diel/table       0.0 0.0 … 0.94 …             24 floats: a diel wavetable
+/phenology/range/<field>    min max                      the normalization used
+```
+
+Normalized fields: `activity`, `richness`, `biophony`, `geophony`, `anthrophony`, `ndsi`, `adi`, `aci`, `dawn`.
+
+The query server answers `/phenology/query/meta`, `/query/day <int>`, `/query/date <str>`, `/query/next`, `/query/prev`, `/query/events` and `/query/reply_port <int>`.
+
+Per-event OSC (`/parliament/event/*`) is also emitted, including `/parliament/event/voct` — the spectral centroid pre-converted to V/Oct with 261.63 Hz at 0 V — plus `/ilda/{color,intensity,angle,speed}` for laser control.
+
+The full address map is written next to your results as `osc_address_map.txt`, generated from the code rather than copied here:
+
+```bash
+./bioacoustics.sh osc map detected_events/
+```
+
+**Phenological shifts detected across days:** `breeding_chorus_onset` (low + high biophony energy both jump), `migration_acoustic_shift` (ADI turnover), `rain_season_transition` (geophonic events increase), `dawn_chorus_advance_delay` (onset time drifts), `nocturnal_community_change` (night assemblage turns over).
+
+---
+
+## Command reference
+
+```
+./bioacoustics.sh [subcommand] [options]
+
+  detect      analyse recordings → event clips, videos, OSC, reports
+  phenology   build/refresh the calendar and its OSC exports
+  osc         export | phenology | events | serve | map
+  gallery     rebuild the event-clip gallery from existing results
+  media       spectrogram | poster | split | gif
+  metadata    AudioMoth metadata report
+  doctor      check tooling and report what is available
+  wizard      the guided front-end (default when run with no arguments)
+```
+
+A path as the first argument means `detect`, so `./detect_events.sh rec.WAV --threshold 1.5` still works.
+
+### detect
+
+```
+  -o, --output-dir DIR        where results go (./detected_events)
+      --sensitivity NAME      subtle | balanced | salient
+      --threshold N           spectral flux threshold in MAD units (2.5)
+      --pre-roll N            seconds of context before onset (20)
+      --post-roll N           seconds of context after offset (10)
+      --baseline-window N     adaptive baseline window (60)
+      --min-event-duration N  discard shorter events (2)
+      --merge-gap N           merge events closer than this (5)
+
+      --roles LIST            only clip these event types
+      --domains LIST          biophony,geophony,anthrophony,transition
+      --min-confidence N      skip classifications below this (0-1)
+
+      --organize-by MODE      role | domain | flat
+      --max-freq N            top frequency in spectrogram renders (10000)
+      --no-video              skip MP4 rendering
+      --no-poster             skip PNG + thumbnail
+      --gif                   also render a looping GIF per clip
+      --no-reels              skip the per-type concatenated reels
+      --no-style-by-domain    one colormap for every event type
+      --no-gallery            skip gallery.html
+      --json-only             metadata only — no clips, media or reports
+
+      --phenology             build the calendar afterwards
+      --days-per-second N     calendar playback rate baked into OSC exports (1)
+      --no-csv                skip the CSV export
+
+      --osc-live              replay events live as they are found
+      --osc-host / --osc-port OSC target (127.0.0.1 : 57120)
+      --no-osc                skip OSC and SuperCollider output
+```
+
+Sensitivity presets: **subtle** (1.5 MAD, many events), **balanced** (2.5 MAD, the default), **salient** (4.0 MAD, only strong shifts).
+
+---
+
+## Replaced scripts
+
+Everything below still runs; each one now forwards to the unified pipeline and prints the replacement command.
+
+| Old script | Now | What changed |
+|---|---|---|
+| `make-spectrogram-movie-fixed.sh` | `bioacoustics.sh media spectrogram` | Same filter chain. Event clips are the default path; this is the whole-file escape hatch. Overlays no longer break on commas/colons in habitat names. |
+| `make-spectrogram-thumbnail-fixed.sh` | `bioacoustics.sh media poster` | Same `showspectrumpic` recipe, now also applied per event clip. Thumbnails are 256×144 (were 128×72). |
+| `master_script.sh` | `bioacoustics.sh detect` | Three chained scripts became stages of one pipeline, operating on events instead of whole recordings. |
+| `enhanced_html_generator.sh` | `bioacoustics.sh gallery` | Was byte-identical to the file below. One card per event grouped by role; reads `events.json` instead of scanning for `*-thumbnail.png`; self-contained lightbox; no ffprobe/jq/numfmt dependency. GPS tagging carried over, same `localStorage` key. |
+| `make-html-lightbox-table-fixed.sh` | `bioacoustics.sh gallery` | Duplicate of the above (same md5). |
+| `vid2gif.sh` | `bioacoustics.sh media gif` | ffmpeg `palettegen`/`paletteuse` instead of mplayer + ImageMagick + gifsicle. No temp frame dumps, no hard-coded `/opt/homebrew` paths. |
+| `split-video.sh` | `bioacoustics.sh media split` | Same size-budget approach, no `bc` dependency, audio re-encoded so each part plays standalone. |
+
+Unchanged and reachable from the wizard: `AudioMothRECS_LaLuna/audiomoth_processing.sh` (metadata report) and `HDR-DNG-DJI-IMGS` (bracketed DNG → HDR).
+
+---
+
+## How detection works
+
+### Spectral analysis
+
+STFT with `frame_size=2048`, `hop=512` (75% overlap), Hann window. At 48 kHz that gives ~23 Hz frequency and ~10.7 ms time resolution — enough for bird syllables of 50–200 ms. Recordings above 48 kHz are downsampled for detection; clips keep the original sample rate.
+
+Per frame: **spectral flux** (half-wave rectified L2 norm — the detection signal), **spectral centroid** (brightness, in Hz), **spectral flatness** (Wiener entropy; 1.0 = white noise, 0.0 = pure tone), and energy in six ecological bands:
 
 | Band | Range | Ecological content |
 |------|-------|--------------------|
@@ -99,232 +333,107 @@ The detector computes a Short-Time Fourier Transform (STFT) with frame_size=2048
 | Biophony high | 8–16 kHz | Insects, bats |
 | Ultrasonic | 16–24 kHz | Bats (if sample rate allows) |
 
-### Event Detection
+### Event detection
 
-Events are detected using an **adaptive threshold** algorithm:
+1. Running median and MAD of spectral flux over a 60 s causal baseline
+2. Trigger when flux exceeds `median + 2.5 × 1.4826 × MAD`
+3. Merge events within 5 s of each other
+4. Discard merged events shorter than 2 s
+5. Pad each clip with pre/post-roll, capped at 5 minutes
 
-1. Compute a running median and MAD (median absolute deviation) of spectral flux over a 60-second causal baseline window
-2. An event triggers when spectral flux exceeds `median + 2.5 * 1.4826 * MAD`
-3. Nearby events within 5 seconds of each other are merged into a single event
-4. Merged events shorter than 2 seconds are discarded
-5. Each event clip includes 20 seconds of pre-roll before onset and 10 seconds of post-roll after offset, capped at 5 minutes maximum
+The MAD baseline adapts continuously, so non-stationary backgrounds — rain onset, dawn chorus buildup — do not swamp detection.
 
-The MAD-based approach is robust to non-stationary backgrounds (rain onset, dawn chorus buildup) because the baseline adapts continuously.
+### Deep ecology classification: Parliament of the Living
 
-### Deep Ecology Classification
+Events are catalogued by their **role in the soundscape**, not by species identity. All acoustic participants — biological, geological, human — are treated as having inherent ecological value, and the system measures acoustic democracy as the Shannon entropy of role distribution.
 
-Each event is classified by its **ecological role** in the soundscape, not by species identity. Classification uses time of day (from AudioMoth timestamp), dominant frequency band, spectral flatness, event duration, and energy distribution.
+**Biophonic voices:** `dawn_chorus_participant`, `dusk_chorus_participant`, `nocturnal_voice`, `territorial_announcement`, `alarm_or_alert`, `insect_chorus`, `amphibian_assembly`
 
-**Biophonic voices** (the Parliament):
-- `dawn_chorus_participant` — Mid-frequency activity during dawn hours (4:00–7:00)
-- `dusk_chorus_participant` — Mid-frequency activity during dusk hours (17:00–19:30)
-- `nocturnal_voice` — Night-time vocalizations (20:00–4:00)
-- `territorial_announcement` — Tonal mid-frequency vocalizations of moderate duration
-- `alarm_or_alert` — Short, intense mid-frequency events
-- `insect_chorus` — Sustained high-frequency activity
-- `amphibian_assembly` — Tonal low-frequency sustained signals
+**Geophonic elements:** `rain_event`, `wind_event`, `water_flow`
 
-**Geophonic elements** (Voice of the Earth):
-- `rain_event` — Long-duration broadband noise in the geophony band
-- `wind_event` — Moderate-duration broadband noise in the geophony band
-- `water_flow` — Noise-like signals in the geophony band
+**Anthrophonic intrusions:** `mechanical_intrusion`, `aircraft_passage`
 
-**Anthrophonic intrusions:**
-- `mechanical_intrusion` — Low-frequency sustained noise
-- `aircraft_passage` — Low-frequency passage patterns
+**Acoustic transitions (temporal ecotones):** `silence_to_activity`, `activity_to_silence`, `community_shift`
 
-**Acoustic transitions** (temporal ecotones):
-- `silence_to_activity` — Large flux increase from previous event
-- `activity_to_silence` — Large flux decrease from previous event
-- `community_shift` — Energy spread across multiple bands
+Classification uses time of day (from the AudioMoth timestamp), dominant band, spectral flatness, duration and energy distribution, and reports a confidence score with human-readable reasoning.
 
-Each classification includes a **confidence score** (0–1) and human-readable reasoning.
+### Ecoacoustic indices
 
-### Ecoacoustic Indices
-
-Five standard ecoacoustic indices are computed per event and per recording:
+Computed per event and per recording:
 
 | Index | Reference | Description |
 |-------|-----------|-------------|
-| **ACI** | Pieretti et al. 2011 | Acoustic Complexity Index — temporal variability within frequency bins. High = complex biophonic activity. |
-| **BIO** | Boelman et al. 2007 | Bioacoustic Index — area under the mean spectrum curve between 2–8 kHz. |
-| **NDSI** | Kasten et al. 2012 | Normalized Difference Soundscape Index — (biophony - anthrophony) / total. Range: -1 (all anthrophony) to +1 (all biophony). |
-| **ADI** | Villanueva-Rivera et al. 2011 | Acoustic Diversity Index — Shannon entropy of frequency band activity proportions. |
-| **AEI** | Villanueva-Rivera et al. 2011 | Acoustic Evenness Index — Gini coefficient of frequency band activity. |
+| **ACI** | Pieretti et al. 2011 | Temporal variability within frequency bins. High = complex biophonic activity. |
+| **BIO** | Boelman et al. 2007 | Area under the mean spectrum curve, 2–8 kHz. |
+| **NDSI** | Kasten et al. 2012 | (biophony − anthrophony) / total. −1 = all anthrophony, +1 = all biophony. |
+| **ADI** | Villanueva-Rivera et al. 2011 | Shannon entropy of band activity proportions. |
+| **AEI** | Villanueva-Rivera et al. 2011 | Gini coefficient of band activity. |
 
-**Parliament summary** statistics per recording:
-- Total voices (event count)
-- Domain percentages (biophony / geophony / anthrophony / transition)
-- **Democracy index** — Shannon entropy of role distribution. Higher = more diverse acoustic community.
-- **Niche partitioning score** — Shannon entropy of frequency band usage. Higher = more spectral niche diversity.
-
-### Spectrogram Videos
-
-Each event clip gets a spectrogram MP4 video that mirrors the ffmpeg filter chain from `make-spectrogram-movie-fixed.sh`:
-
-- `showspectrum` filter: 996x592, linear frequency scale, cool colormap, log gain scale, 72dB dynamic range, scroll mode
-- Header text overlay (top-left): habitat name
-- Date text overlay (top-right): recording date and time
-- Classification label (bottom-left, yellow): ecological role, confidence, and dominant frequency band
-- H.264 encoding, AAC audio at 128kbps
-
-### OSC Output (Open Sound Control)
-
-Every detected event generates OSC messages tagged with full ecological metadata, designed for **Eurorack modular synthesis**, **ILDA laser control**, **SuperCollider**, and other OSC-capable instruments.
-
-**Two modes:**
-- **Batch mode** (default): Writes `.osc` bundle file + SuperCollider `.scd` score file
-- **Live/playback mode** (`--osc-live`): Replays events in real-time to a configurable OSC target
-
-**OSC address namespace:**
-
-```
-/parliament/event              — new event trigger (bang)
-/parliament/event/onset        — onset time (float, seconds)
-/parliament/event/duration     — event duration (float, seconds)
-/parliament/event/role         — ecological role tag (string)
-/parliament/event/domain       — acoustic domain (string: biophony/geophony/anthrophony)
-/parliament/event/band         — dominant frequency band (string)
-/parliament/event/centroid     — spectral centroid Hz (float)
-/parliament/event/flatness     — spectral flatness 0-1 (float)
-/parliament/event/flux         — peak spectral flux (float)
-/parliament/event/confidence   — detection confidence 0-1 (float)
-/parliament/event/aci          — acoustic complexity index (float)
-/parliament/event/ndsi         — normalized difference soundscape index (float)
-/parliament/event/bio          — bioacoustic index (float)
-/parliament/event/adi          — acoustic diversity index (float)
-/parliament/habitat            — habitat type (string)
-/parliament/season             — season (string)
-/parliament/temperature        — ambient temperature C (float)
-/parliament/hour               — hour of day 0-23 (int)
-/parliament/democracy_index    — acoustic democracy index (float)
-
-# ILDA laser control
-/ilda/color                    — mapped from dominant band (int, ILDA color index)
-/ilda/intensity                — mapped from confidence (float 0-1)
-/ilda/angle                    — mapped from spectral centroid (float, normalized)
-/ilda/speed                    — mapped from spectral flux (float)
-
-# Phenological calendar triggers
-/phenology/event               — phenological event trigger
-/phenology/type                — event type (string)
-/phenology/day_of_year         — day of year 1-365 (int)
-/phenology/dawn_chorus_time    — dawn chorus onset, minutes after midnight (float)
-```
-
-**Eurorack mapping notes:**
-- Centroid -> V/Oct pitch CV (log-scaled from 261.63Hz = 0V)
-- Flux -> gate/trigger intensity
-- Flatness -> timbre CV (0 = tonal, 1 = noise)
-- NDSI -> bipolar CV (-5V to +5V mapping)
-
-**SuperCollider score (.scd):** Each event becomes a timed OSC bundle compatible with `Score.play` and NRT rendering.
-
-### Phenological Calendar
-
-When processing multiple recordings (`--phenology` flag), the detector builds a **phenological calendar** tracking how acoustic communities shift across time:
-
-**Temporal resolution layers:**
-- **Diel cycle** (24h): dawn chorus onset time, dusk transition, nocturnal peak activity
-- **Multi-day**: acoustic community stability, arrival/departure of vocal species groups
-- **Seasonal**: biophonic richness shifts, insect chorus intensity, amphibian breeding chorus
-
-**Phenological events detected:**
-- `breeding_chorus_onset` — amphibian/insect choruses intensify across consecutive recordings
-- `migration_acoustic_shift` — new frequency niches appear/disappear (ADI change)
-- `rain_season_transition` — geophonic rain events increase, biophonic patterns shift
-- `dawn_chorus_advance_delay` — dawn chorus onset time shifts with season
-- `nocturnal_community_change` — night-time assemblage shifts
-
-**Outputs:** `phenological_calendar.json` with dated entries, and an HTML calendar visualization (heatmap: hours x days, colored by acoustic activity intensity).
-
-### Output Structure
-
-```
-detected_events/
-  {recording_stem}/
-    events.json                         # Full event metadata + classifications + indices
-    events.osc                          # OSC bundle file
-    events_score.scd                    # SuperCollider score file
-    event_001_{onset}s-{offset}s.wav    # Audio clip (original sample rate)
-    event_001_{onset}s-{offset}s.mp4    # Spectrogram video
-    ...
-    report.html                         # Per-file HTML report
-  phenological_calendar.json            # Cross-recording phenology
-  phenological_calendar.html            # Calendar heatmap visualization
-  summary_report.html                   # Batch summary
-  parliament_osc_score.scd              # Combined SuperCollider score
-```
-
-### HTML Reports
-
-Reports use the same visual style as the existing AudioMoth metadata reports (gradient #667eea -> #764ba2, Plotly.js 3.3.0):
-
-- **Parliament of the Living** summary panel with domain pie chart, democracy index, niche partitioning score
-- **Event timeline** — colored blocks on time axis by acoustic domain
-- **Spectral flux curve** with event markers
-- **Acoustic indices** comparison bar chart per event
-- **Event cards** with embedded `<video>` players for each clip's spectrogram MP4, showing classification, confidence, centroid, band, and indices
+Per-recording parliament statistics: total voices, domain percentages, **democracy index** (entropy of role distribution) and **niche partitioning** (entropy of band usage).
 
 ---
 
-## Other Tools
+## Package layout
 
-### Spectrogram Movie Generator (`make-spectrogram-movie-fixed.sh`)
-
-Generates scrolling spectrogram MP4 videos from WAV files using ffmpeg's `showspectrum` filter. Works with any WAV filename format. Features configurable dynamic range, frequency scale, colormap, and text overlays with recording date/location.
-
-```bash
-./make-spectrogram-movie-fixed.sh recording1.WAV recording2.WAV ...
 ```
+bioacoustics.sh          Single entry point — wizard, or any subcommand
+detect_events.sh         Direct access to the detect pipeline
 
-### Spectrogram Thumbnail Generator (`make-spectrogram-thumbnail-fixed.sh`)
-
-Generates static spectrogram PNG images (full-size + thumbnail) from AudioMoth WAV files using ffmpeg's `showspectrumpic` filter. Based on Nathan Wolek's original script, modified for YYYYMMDD_HHMMSS.WAV format.
-
-```bash
-./make-spectrogram-thumbnail-fixed.sh recording1.WAV recording2.WAV ...
+bioacoustic_detector/
+  wizard.py              Guided front-end to every feature
+  cli.py                 Subcommands and argument parsing
+  pipeline.py            The stage chain, per file and per batch
+  config.py              Every tunable parameter, plus sensitivity presets
+  spectral.py            STFT, flux, centroid, flatness, band energies
+  detector.py            Adaptive-threshold event detection
+  classifier.py          Deep ecology taxonomy
+  indices.py             ACI, BIO, NDSI, ADI, AEI
+  clipper.py             Clip extraction, event filters, role-based filing
+  video.py               Event clip videos, posters, GIFs, per-type reels
+  media.py               ffmpeg plumbing; video split and GIF conversion
+  gallery.py             Event-clip gallery with lightbox and GPS tagging
+  phenology.py           Calendar, OSC frames, CSV, HTML
+  osc_output.py          OSC messages, bundles, SuperCollider scores, streaming
+  osc_server.py          Bidirectional OSC query server
+  metadata.py            AudioMoth metadata; habitat/season from paths
+  report.py              Per-recording and batch HTML reports
+  store.py               events.json read/write with portable paths
 ```
-
-### Master Processing Script (`master_script.sh`)
-
-Orchestrates batch processing: generates spectrogram thumbnails, movies, and HTML gallery tables for a directory of AudioMoth recordings.
-
-```bash
-./master_script.sh
-```
-
-### AudioMoth Metadata Processor (`AudioMothRECS_LaLuna/audiomoth_processing.sh`)
-
-Extracts AudioMoth metadata (datetime, temperature, battery, gain, sample rate) using the `metamoth` Python library. Generates interactive HTML reports with Plotly.js charts (temperature over time, recording timeline), an embedded audio player, and sortable/filterable tables. Automatically parses habitat type and season from directory structure.
-
-```bash
-cd AudioMothRECS_LaLuna
-./audiomoth_processing.sh "Epoca lluvias/Bosque de galería y-o ripario/"
-```
-
-### HTML Gallery Generator (`enhanced_html_generator.sh`)
-
-Creates an interactive HTML gallery from spectrogram thumbnails with metadata extraction and GPS coordinate entry.
-
-### Video Utilities
-
-- **`split-video.sh`** — Split video files at specified timestamps with re-encoding
-- **`vid2gif.sh`** — Convert video clips to optimized GIFs
-
-### HDR DNG Processing (`HDR-DNG-DJI-IMGS/`)
-
-Batch processing scripts for DNG raw image files from DJI drones with HDR tone mapping.
 
 ---
 
 ## Requirements
 
-- **bash** (all shell scripts)
-- **ffmpeg** with showspectrum/showspectrumpic filters (spectrogram generation)
-- **Python 3.10+** (event detector, metadata processor)
-- **metamoth** (AudioMoth WAV metadata parsing)
-- **numpy, scipy, soundfile** (spectral analysis)
-- **python-osc** (OSC output)
+- **Python 3.10 or newer.** macOS ships 3.9 as `/usr/bin/python3`; the launcher searches for a newer interpreter and rebuilds its virtualenv if it finds an older one. Install with `brew install python@3.12` if needed.
+- **ffmpeg** — optional but needed for spectrogram video, stills and GIFs. Without it you still get clips, `events.json`, OSC exports, the calendar and the reports; the pipeline says so and carries on. `brew install ffmpeg`.
+- Python packages (installed automatically into the managed venv): `numpy`, `scipy`, `soundfile`, `metamoth`, `python-osc`.
 
-The event detector's bash wrapper handles Python dependency installation automatically via a virtual environment.
+`./bioacoustics.sh doctor` reports on all of the above.
+
+---
+
+## Troubleshooting
+
+**"Python 3.10 or newer is required but was not found."**
+Install a newer interpreter (`brew install python@3.12`) and run again. The launcher searches `python3.14` down to `python3.10`, then `python3`, and also looks inside `/opt/homebrew/bin` and `/usr/local/bin` in case Homebrew is not on your `PATH`. It will not use macOS's system 3.9.
+
+**No spectrogram videos appeared.**
+ffmpeg is missing — the run says so as it goes and produces everything else. Install it and re-run `detect` on the same input: media is rendered during detection, so there is no separate render step to resume. The clips and JSON from the first pass are simply overwritten.
+
+**"No WAV files found in: …"**
+The path is checked as given, relative to where you are standing (not to the repo). Quote paths containing spaces or accents: `./detect_events.sh "Epoca lluvias/Bosque de galería y-o ripario/"`. Both `.WAV` and `.wav` are found, recursively.
+
+**Too many or too few events.**
+Start with `--sensitivity subtle | balanced | salient`, and only reach for `--threshold` (MAD units — lower is more sensitive) if the presets do not land where you want. `--min-event-duration` discards brief blips; `--merge-gap` decides how far apart two triggers must be to count as separate events. Probe with `--json-only` first, it costs seconds.
+
+**"Only one recording — the calendar needs several to compare."**
+Phenology is a cross-recording product. It needs recordings from at least two different days, each carrying a parseable timestamp — either an AudioMoth `YYYYMMDD_HHMMSS.WAV` filename or intact AudioMoth metadata. The run reports how many of your files have usable timestamps.
+
+**Nothing arrives at the instrument.**
+Check the target with `--host` and `--port` (default `127.0.0.1:57120`, SuperCollider's default). `osc serve` listens on `--listen-port` (default 57121) and *replies* to `--host`/`--port`, which can be redirected at runtime by sending `/phenology/query/reply_port <int>`. `cat osc_address_map.txt` for the exact addresses your results emit.
+
+**A gallery link opens nothing.**
+Media paths inside `events.json` are stored relative to each recording's folder, so the whole output tree can be moved or published as a unit — but moving `gallery.html` on its own breaks its links. Regenerate it in place with `./bioacoustics.sh gallery <output_dir>`.
+
+**An old script printed a note about a new command.**
+That's expected. The seven retired scripts still work; they forward to the pipeline and name their replacement. See [Replaced scripts](#replaced-scripts).

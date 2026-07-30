@@ -1,40 +1,30 @@
 #!/bin/bash
-# Bioacoustic Event Detector — Parliament of the Living
-# Bash wrapper: sets up venv and delegates to Python CLI
+# Bioacoustic Event Detector — direct access to the `detect` pipeline.
+#
+#   ./detect_events.sh recording.WAV
+#   ./detect_events.sh recordings/ --phenology --sensitivity salient
+#
+# This is a thin front for `./bioacoustics.sh detect`, kept because it is the
+# documented and scripted entry point. For the guided version of the same
+# pipeline — and every other feature — run ./bioacoustics.sh with no arguments.
 
-VENV_DIR="$HOME/.bioacoustic_detector_venv"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REQUIREMENTS="$SCRIPT_DIR/requirements-detector.txt"
 
-# Detect Python
-if command -v python3 &> /dev/null; then
-    PYTHON_CMD="python3"
-elif command -v python &> /dev/null; then
-    PYTHON_CMD="python"
-else
-    echo "Error: Python is not installed"
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <WAV_FILE_OR_DIR> [options]"
+    echo ""
+    echo "Common options:"
+    echo "  -o, --output-dir DIR     where to write results (./detected_events)"
+    echo "      --sensitivity NAME   subtle | balanced | salient"
+    echo "      --domains LIST       biophony,geophony,anthrophony,transition"
+    echo "      --roles LIST         only clip these event types"
+    echo "      --phenology          build the calendar and its OSC exports"
+    echo "      --no-video           skip spectrogram rendering"
+    echo "      --json-only          metadata only, no clips"
+    echo ""
+    echo "Full list:      $0 --help"
+    echo "Guided version: ./bioacoustics.sh"
     exit 1
 fi
 
-# Create venv if needed
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating virtual environment..."
-    $PYTHON_CMD -m venv "$VENV_DIR"
-
-    echo "Installing dependencies..."
-    "$VENV_DIR/bin/pip" install --quiet -r "$REQUIREMENTS"
-
-    echo "Setup complete."
-    echo ""
-fi
-
-# Check if dependencies need updating
-if [ "$REQUIREMENTS" -nt "$VENV_DIR/.deps_installed" ]; then
-    echo "Updating dependencies..."
-    "$VENV_DIR/bin/pip" install --quiet -r "$REQUIREMENTS"
-    touch "$VENV_DIR/.deps_installed"
-fi
-
-# Run the detector
-cd "$SCRIPT_DIR"
-exec "$VENV_DIR/bin/python" -m bioacoustic_detector.cli "$@"
+exec "$SCRIPT_DIR/bioacoustics.sh" detect "$@"

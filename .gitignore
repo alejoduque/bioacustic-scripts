@@ -19,6 +19,14 @@ venv/
 audiomoth_reporte.html
 *_reporte.html
 
+# Salida del detector: clips, video, calendario, exportaciones OSC
+detected_events/
+**/clips/
+**/reels/
+*-spectrogram.png
+*-thumbnail.png
+*-fullsize.png
+
 # Subdirectorios específicos con grabaciones
 **/Epoca*/
 

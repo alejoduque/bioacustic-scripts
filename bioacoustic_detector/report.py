@@ -6,9 +6,20 @@ gradient #667eea -> #764ba2, Plotly 3.3.0.
 """
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote
+
+
+def _href(path: str, base: Path) -> str:
+    """Link from the report to a media file next to (or under) it."""
+    if not path:
+        return ""
+    try:
+        rel = os.path.relpath(Path(path).resolve(), base.resolve())
+    except ValueError:
+        rel = path
+    return str(rel).replace(" ", "%20").replace("#", "%23")
 
 
 def generate_event_report(source_file: str, events_data: list[dict],
@@ -22,6 +33,7 @@ def generate_event_report(source_file: str, events_data: list[dict],
     - Acoustic indices charts
     """
     filename = Path(source_file).name
+    base = Path(output_path).parent
     n_events = len(events_data)
     habitat = recording_meta.get("habitat", "Unknown")
     season = recording_meta.get("season", "Unknown")
@@ -35,7 +47,8 @@ def generate_event_report(source_file: str, events_data: list[dict],
     flux_data = json.dumps(_build_flux_data(events_data))
 
     # Build event cards HTML
-    event_cards = "\n".join(_event_card_html(e, i) for i, e in enumerate(events_data, 1))
+    event_cards = "\n".join(_event_card_html(e, i, base)
+                            for i, e in enumerate(events_data, 1))
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -112,6 +125,12 @@ def generate_event_report(source_file: str, events_data: list[dict],
             gap: 8px; font-size: 13px; color: #555; margin-bottom: 10px;
         }}
         .event-meta span {{ font-weight: 500; color: #2c3e50; }}
+        .event-why {{
+            font-size: 12px; color: #7f8c8d; font-style: italic;
+            margin-bottom: 8px;
+        }}
+        .event-links {{ margin-top: 8px; font-size: 12px; }}
+        .event-links a {{ color: #667eea; text-decoration: none; margin-right: 10px; }}
         video {{
             width: 100%; max-width: 800px; border-radius: 8px;
             margin-top: 8px;
@@ -216,19 +235,18 @@ if (tlData.length > 0) {{
     }}, {{ responsive: true }});
 }}
 
-// Flux curve
+// Peak flux per event
 var fluxData = {flux_data};
 if (fluxData.x.length > 0) {{
     Plotly.newPlot('flux-chart', [{{
-        x: fluxData.x, y: fluxData.y, type: 'scatter', mode: 'lines',
-        line: {{ color: '#667eea', width: 1 }}, name: 'Spectral Flux'
-    }}, {{
-        x: fluxData.ex, y: fluxData.ey, type: 'scatter', mode: 'markers',
-        marker: {{ color: '#e74c3c', size: 6 }}, name: 'Events'
+        x: fluxData.x, y: fluxData.y, type: 'bar',
+        marker: {{ color: fluxData.colors }}, name: 'Peak flux',
+        text: fluxData.roles, hovertemplate:
+            '%{{text}}<br>onset %{{x:.1f}}s<br>peak flux %{{y:.2f}}<extra></extra>'
     }}], {{
-        title: 'Spectral Flux Over Time',
-        xaxis: {{ title: 'Time (s)' }},
-        yaxis: {{ title: 'Flux' }},
+        title: 'Peak Spectral Flux per Event',
+        xaxis: {{ title: 'Onset time (s)' }},
+        yaxis: {{ title: 'Peak flux' }},
         margin: {{ t: 40, b: 40, l: 50, r: 20 }},
         paper_bgcolor: 'transparent',
         font: {{ family: 'Segoe UI' }}
@@ -262,21 +280,37 @@ if (idxData.labels.length > 0) {{
 
 
 def generate_summary_report(all_results: list[dict], parliament: dict,
-                            output_path: str) -> str:
+                            output_path: str, gallery_path: str = "",
+                            phenology_path: str = "") -> str:
     """Generate a batch summary report across multiple recordings."""
+    base = Path(output_path).parent
     n_files = len(all_results)
     total_events = sum(r.get("n_events", 0) for r in all_results)
+    total_clips = sum(r.get("n_clips", 0) for r in all_results)
+    n_roles = len(parliament.get("role_counts", {}))
 
     file_rows = "\n".join(
         f"""<tr>
             <td class="filename">{_escape(r.get('filename', ''))}</td>
             <td>{r.get('n_events', 0)}</td>
-            <td>{r.get('habitat', '')}</td>
+            <td>{r.get('n_clips', 0)}</td>
+            <td>{_escape(_top_role(r))}</td>
+            <td>{_escape(r.get('habitat', ''))}</td>
             <td>{r.get('ndsi', 0):.3f}</td>
-            <td><a href="{quote(r.get('report_path', ''))}" style="color:#667eea">View</a></td>
+            <td><a href="{_href(r.get('report_path', ''), base)}"
+                   style="color:#667eea">View</a></td>
         </tr>"""
         for r in all_results
     )
+
+    links = []
+    if gallery_path:
+        links.append(f'<a class="cta" href="{_href(gallery_path, base)}">'
+                     f'Event clip gallery</a>')
+    if phenology_path:
+        links.append(f'<a class="cta" href="{_href(phenology_path, base)}">'
+                     f'Phenological calendar</a>')
+    links_html = f'<div class="links">{"".join(links)}</div>' if links else ""
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -319,6 +353,12 @@ def generate_summary_report(all_results: list[dict], parliament: dict,
         td {{ padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }}
         tr:hover {{ background-color: #f8f9fa; }}
         .filename {{ font-family: monospace; font-size: 13px; }}
+        .links {{ display: flex; gap: 12px; flex-wrap: wrap; }}
+        .cta {{
+            display: inline-block; padding: 10px 18px; border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; text-decoration: none; font-weight: 600;
+        }}
         footer {{
             margin-top: 30px; text-align: center; color: white; font-size: 13px;
         }}
@@ -338,23 +378,29 @@ def generate_summary_report(all_results: list[dict], parliament: dict,
                 <div class="summary-value">{total_events}</div>
             </div>
             <div class="summary-item">
+                <div class="summary-label">Event Clips</div>
+                <div class="summary-value">{total_clips}</div>
+            </div>
+            <div class="summary-item">
                 <div class="summary-label">Democracy Index</div>
                 <div class="summary-value">{parliament.get('democracy_index', 0):.2f}</div>
             </div>
             <div class="summary-item">
-                <div class="summary-label">Total Voices</div>
-                <div class="summary-value">{parliament.get('total_voices', 0)}</div>
+                <div class="summary-label">Event Types</div>
+                <div class="summary-value">{n_roles}</div>
             </div>
         </div>
+        {links_html}
     </div>
     <div class="panel">
         <h2>Recordings</h2>
         <table>
-            <tr><th>File</th><th>Events</th><th>Habitat</th><th>NDSI</th><th>Report</th></tr>
+            <tr><th>File</th><th>Events</th><th>Clips</th><th>Dominant role</th>
+                <th>Habitat</th><th>NDSI</th><th>Report</th></tr>
             {file_rows}
         </table>
     </div>
-    <footer>Bioacoustic Event Detector v0.1.0 — {datetime.now().strftime('%Y-%m-%d %H:%M')}</footer>
+    <footer>Bioacoustic toolkit — {datetime.now().strftime('%Y-%m-%d %H:%M')}</footer>
 </div>
 </body>
 </html>"""
@@ -371,7 +417,15 @@ def _escape(text: str) -> str:
             .replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def _event_card_html(event: dict, index: int) -> str:
+def _top_role(result: dict) -> str:
+    """Most frequent ecological role in a recording."""
+    roles = result.get("parliament", {}).get("role_counts", {})
+    if not roles:
+        return "—"
+    return max(roles, key=roles.get).replace("_", " ")
+
+
+def _event_card_html(event: dict, index: int, base: Path) -> str:
     """Build HTML for a single event card."""
     domain = event.get("domain", "")
     role = event.get("role", "unknown").replace("_", " ").title()
@@ -381,13 +435,36 @@ def _event_card_html(event: dict, index: int) -> str:
     confidence = event.get("confidence", 0)
     centroid = event.get("centroid", 0)
     band = event.get("dominant_band", "").replace("_", " ")
-    video_path = event.get("video_path", "")
-    clip_path = event.get("clip_path", "")
 
-    video_html = ""
+    video_path = event.get("video_path", "")
+    poster_path = event.get("poster_path", "")
+
+    media_html = ""
     if video_path and Path(video_path).exists():
-        rel = Path(video_path).name
-        video_html = f'<video controls preload="metadata"><source src="{rel}" type="video/mp4"></video>'
+        poster_attr = ""
+        if poster_path and Path(poster_path).exists():
+            poster_attr = f' poster="{_href(poster_path, base)}"'
+        media_html = (f'<video controls preload="metadata"{poster_attr}>'
+                      f'<source src="{_href(video_path, base)}" type="video/mp4">'
+                      f'</video>')
+    elif poster_path and Path(poster_path).exists():
+        media_html = (f'<img src="{_href(poster_path, base)}" '
+                      f'alt="{role} spectrogram" style="width:100%;max-width:800px;'
+                      f'border-radius:8px;margin-top:8px">')
+
+    links = [
+        f'<a href="{_href(event[key], base)}"{extra}>{label}</a>'
+        for key, label, extra in (
+            ("clip_path", "wav", " download"),
+            ("gif_path", "gif", ' target="_blank"'),
+            ("poster_path", "png", ' target="_blank"'),
+        )
+        if event.get(key) and Path(event[key]).exists()
+    ]
+    links_html = (f'<div class="event-links">{" ".join(links)}</div>'
+                  if links else "")
+
+    reasoning = _escape(event.get("reasoning", ""))
 
     return f"""<div class="event-card {domain}">
         <div class="event-header">
@@ -403,7 +480,9 @@ def _event_card_html(event: dict, index: int) -> str:
             <div>ACI: <span>{event.get('aci', 0):.2f}</span></div>
             <div>NDSI: <span>{event.get('ndsi', 0):.3f}</span></div>
         </div>
-        {video_html}
+        <div class="event-why">{reasoning}</div>
+        {media_html}
+        {links_html}
     </div>"""
 
 
@@ -443,12 +522,23 @@ def _build_timeline_data(events: list[dict]) -> list[dict]:
 
 
 def _build_flux_data(events: list[dict]) -> dict:
-    """Build flux curve data. Events provide their flux snapshot."""
-    # We pass onset/peak_flux pairs for event markers
-    ex = [e.get("onset_s", 0) for e in events]
-    ey = [e.get("peak_flux", 0) for e in events]
-    # Full flux curve is not stored in events_data; we just show event markers
-    return {"x": ex, "y": ey, "ex": ex, "ey": ey}
+    """
+    Peak spectral flux per event, coloured by acoustic domain.
+
+    The full frame-by-frame flux curve is not kept in events.json (it is far
+    larger than everything else combined), so this charts the per-event peaks
+    that triggered detection.
+    """
+    color_map = {
+        "biophony": "#27ae60", "geophony": "#3498db",
+        "anthrophony": "#e74c3c", "transition": "#f39c12",
+    }
+    return {
+        "x": [e.get("onset_s", 0) for e in events],
+        "y": [e.get("peak_flux", 0) for e in events],
+        "colors": [color_map.get(e.get("domain", ""), "#95a5a6") for e in events],
+        "roles": [e.get("role", "") for e in events],
+    }
 
 
 def _build_indices_data(events: list[dict]) -> dict:

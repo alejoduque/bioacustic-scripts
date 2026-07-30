@@ -92,8 +92,6 @@ def acoustic_diversity_index(magnitude: np.ndarray, freqs: np.ndarray,
         if not np.any(mask):
             proportions.append(0.0)
             continue
-        mean_power = np.mean(magnitude[:, mask] ** 2)
-        mean_db = 10 * np.log10(max(mean_power, 1e-20))
         # Proportion of frames above threshold in this band
         band_power_db = 10 * np.log10(np.maximum(np.mean(magnitude[:, mask] ** 2, axis=1), 1e-20))
         prop = np.mean(band_power_db > threshold_db)

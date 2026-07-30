@@ -1,416 +1,574 @@
 """
-CLI entry point for the bioacoustic event detector.
+CLI entry point for the bioacoustic toolkit.
 
-Usage: python -m bioacoustic_detector.cli <WAV_FILE_OR_DIR> [options]
+    python -m bioacoustic_detector.cli <subcommand> [options]
+
+Subcommands:
+    detect      analyse recordings -> event clips, videos, OSC, reports
+    phenology   build/refresh the phenological calendar and its OSC exports
+    osc         export, stream or serve OSC (events and phenology)
+    gallery     rebuild the event-clip gallery from existing results
+    media       whole-file spectrogram, video splitting, video -> GIF
+    metadata    AudioMoth metadata report (delegates to audiomoth_processing.sh)
+    doctor      check tooling and report what is available
+    wizard      interactive, guided front-end to all of the above
+
+Passing a path as the first argument is shorthand for `detect <path>`, so
+`./detect_events.sh recording.WAV --threshold 1.5` keeps working.
 """
 
 import argparse
-import json
+import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
-import numpy as np
-import soundfile as sf
+from . import store
+from .classifier import ROLES
+from .config import (SENSITIVITY_PRESETS, ClipConfig, Config, DetectorConfig,
+                     OSCConfig, PhenologyConfig, SpectralConfig, VideoConfig,
+                     apply_sensitivity)
 
-from .config import Config, SpectralConfig, DetectorConfig, VideoConfig, OSCConfig
-from .spectral import analyze
-from .detector import detect_events, Event
-from .classifier import classify_event, parliament_summary, Classification
-from .indices import compute_all_indices
-from .clipper import extract_all_clips
-from .video import generate_all_videos
-from .metadata import get_recording_metadata
-from .report import generate_event_report, generate_summary_report
-from .osc_output import (write_osc_bundle_file, generate_supercollider_score,
-                         send_live_osc)
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SUBCOMMANDS = ("detect", "phenology", "osc", "gallery", "media", "metadata",
+               "doctor", "wizard")
+DOMAINS = ("biophony", "geophony", "anthrophony", "transition")
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+# --- argument parsing -------------------------------------------------------
+
+def _csv_list(value: str) -> tuple:
+    return tuple(v.strip() for v in value.split(",") if v.strip())
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Bioacoustic Event Detector — Parliament of the Living",
+        prog="bioacoustic_detector",
+        description="Bioacoustic toolkit — Parliament of the Living",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Run with no arguments, or `wizard`, for the guided front-end.",
     )
-    parser.add_argument("input", help="WAV file or directory to process")
-    parser.add_argument("-o", "--output-dir", default="./detected_events",
-                        help="Output directory (default: ./detected_events)")
-    parser.add_argument("--threshold", type=float, default=2.5,
-                        help="Spectral flux threshold in MAD units (default: 2.5)")
-    parser.add_argument("--pre-roll", type=float, default=20.0,
-                        help="Seconds before event onset (default: 20)")
-    parser.add_argument("--baseline-window", type=float, default=60.0,
-                        help="Baseline window in seconds (default: 60)")
-    parser.add_argument("--min-event-duration", type=float, default=2.0,
-                        help="Minimum event duration in seconds (default: 2)")
-    parser.add_argument("--max-freq", type=int, default=10000,
-                        help="Max frequency Hz for analysis/video (default: 10000)")
-    parser.add_argument("--no-video", action="store_true",
-                        help="Skip spectrogram MP4 generation")
-    parser.add_argument("--json-only", action="store_true",
-                        help="Output JSON metadata only")
+    sub = parser.add_subparsers(dest="command")
 
-    # OSC options
-    parser.add_argument("--osc-live", action="store_true",
-                        help="Replay events as live OSC to target host")
-    parser.add_argument("--osc-host", default="127.0.0.1",
-                        help="OSC target host (default: 127.0.0.1)")
-    parser.add_argument("--osc-port", type=int, default=57120,
-                        help="OSC target port (default: 57120)")
-    parser.add_argument("--no-osc", action="store_true",
-                        help="Skip OSC/SuperCollider output")
+    _add_detect_parser(sub)
+    _add_phenology_parser(sub)
+    _add_osc_parser(sub)
+    _add_gallery_parser(sub)
+    _add_media_parser(sub)
+    _add_metadata_parser(sub)
+    sub.add_parser("doctor", help="check ffmpeg/python/deps and report status")
+    sub.add_parser("wizard", help="interactive guided front-end")
 
-    # Phenology
-    parser.add_argument("--phenology", action="store_true",
-                        help="Generate phenological calendar (requires multiple recordings)")
-
-    return parser.parse_args(argv)
+    return parser
 
 
-def find_wav_files(path: str) -> list[str]:
-    """Find all WAV files in path (file or directory)."""
-    p = Path(path)
-    if p.is_file() and p.suffix.lower() == ".wav":
-        return [str(p)]
-    if p.is_dir():
-        files = sorted(list(p.rglob("*.WAV")) + list(p.rglob("*.wav")))
-        return [str(f) for f in files]
-    return []
+def _add_detect_parser(sub) -> None:
+    p = sub.add_parser(
+        "detect", help="analyse recordings and produce event clips",
+        description="Detect acoustic events and cut a video clip for each one.")
+    p.add_argument("inputs", nargs="+",
+                   help="WAV files and/or directories to process")
+    p.add_argument("-o", "--output-dir", default="./detected_events",
+                   help="Output directory (default: ./detected_events)")
+
+    d = p.add_argument_group("detection")
+    d.add_argument("--sensitivity", choices=sorted(SENSITIVITY_PRESETS),
+                   help="Preset that sets threshold/duration/merge together")
+    d.add_argument("--threshold", type=float,
+                   help="Spectral flux threshold in MAD units (default: 2.5)")
+    d.add_argument("--baseline-window", type=float, default=60.0,
+                   help="Adaptive baseline window in seconds (default: 60)")
+    d.add_argument("--min-event-duration", type=float,
+                   help="Minimum event duration in seconds (default: 2)")
+    d.add_argument("--merge-gap", type=float,
+                   help="Merge events closer than this many seconds (default: 5)")
+    d.add_argument("--pre-roll", type=float, default=20.0,
+                   help="Seconds of context before onset (default: 20)")
+    d.add_argument("--post-roll", type=float, default=10.0,
+                   help="Seconds of context after offset (default: 10)")
+    d.add_argument("--max-clip-duration", type=float, default=300.0,
+                   help="Cap on clip length in seconds (default: 300)")
+
+    s = p.add_argument_group("event selection")
+    s.add_argument("--roles", type=_csv_list, default=(),
+                   help="Only clip these ecological roles (comma-separated)")
+    s.add_argument("--domains", type=_csv_list, default=(),
+                   help=f"Only clip these domains: {', '.join(DOMAINS)}")
+    s.add_argument("--min-confidence", type=float, default=0.0,
+                   help="Skip classifications below this confidence (0-1)")
+
+    m = p.add_argument_group("media")
+    m.add_argument("--max-freq", type=int, default=10000,
+                   help="Max frequency Hz for spectrogram renders (default: 10000)")
+    m.add_argument("--organize-by", choices=("role", "domain", "flat"),
+                   default="role",
+                   help="Clip directory layout (default: role)")
+    m.add_argument("--no-video", action="store_true",
+                   help="Skip spectrogram MP4 generation")
+    m.add_argument("--no-poster", action="store_true",
+                   help="Skip static spectrogram PNG/thumbnail generation")
+    m.add_argument("--gif", action="store_true",
+                   help="Also render a looping GIF per clip")
+    m.add_argument("--no-reels", action="store_true",
+                   help="Skip the concatenated one-video-per-event-type reels")
+    m.add_argument("--no-style-by-domain", action="store_true",
+                   help="Use one colormap for every event type")
+    m.add_argument("--no-gallery", action="store_true",
+                   help="Skip the HTML event gallery")
+    m.add_argument("--json-only", action="store_true",
+                   help="Output JSON metadata only (no clips, media or reports)")
+
+    o = p.add_argument_group("OSC")
+    o.add_argument("--osc-live", action="store_true",
+                   help="Replay events as live OSC to the target host")
+    o.add_argument("--osc-host", default="127.0.0.1",
+                   help="OSC target host (default: 127.0.0.1)")
+    o.add_argument("--osc-port", type=int, default=57120,
+                   help="OSC target port (default: 57120)")
+    o.add_argument("--no-osc", action="store_true",
+                   help="Skip OSC/SuperCollider output")
+
+    ph = p.add_argument_group("phenology")
+    ph.add_argument("--phenology", action="store_true",
+                    help="Build the phenological calendar (needs several recordings)")
+    ph.add_argument("--days-per-second", type=float, default=1.0,
+                    help="Calendar playback rate for OSC exports (default: 1)")
+    ph.add_argument("--no-csv", action="store_true",
+                    help="Skip the phenological CSV export")
 
 
-def process_single_file(wav_path: str, config: Config) -> dict:
-    """
-    Process a single WAV file through the full pipeline.
+def _add_phenology_parser(sub) -> None:
+    p = sub.add_parser(
+        "phenology", help="build the phenological calendar and OSC exports",
+        description="Build the calendar from an output directory produced by "
+                    "`detect`, or from recordings (analysed in metadata-only mode).")
+    p.add_argument("input", help="Output directory with events.json files, "
+                                 "or a directory of recordings")
+    p.add_argument("-o", "--output-dir", default="",
+                   help="Where to write the calendar (default: alongside results)")
+    p.add_argument("--reanalyze", action="store_true",
+                   help="Re-run detection even if events.json files exist")
+    p.add_argument("--days-per-second", type=float, default=1.0,
+                   help="Calendar playback rate for OSC exports (default: 1)")
+    p.add_argument("--threshold", type=float, default=2.5,
+                   help="Detection threshold when re-analysing (default: 2.5)")
+    p.add_argument("--no-csv", action="store_true", help="Skip the CSV export")
+    p.add_argument("--no-osc", action="store_true", help="Skip OSC exports")
 
-    Returns a result dict with all metadata, events, classifications, indices.
-    """
-    filename = Path(wav_path).name
-    stem = Path(wav_path).stem
-    file_output_dir = str(Path(config.output_dir) / stem)
-    Path(file_output_dir).mkdir(parents=True, exist_ok=True)
 
-    print(f"\n{'='*60}")
-    print(f"Processing: {filename}")
-    print(f"{'='*60}")
+def _add_osc_parser(sub) -> None:
+    p = sub.add_parser(
+        "osc", help="export, stream or serve OSC",
+        description="Everything OSC. `phenology` is the main mode: it replays a "
+                    "season of recordings as a time-compressed control stream.")
+    p.add_argument("mode", choices=("export", "phenology", "events", "serve", "map"),
+                   help="export: write files | phenology: stream the calendar | "
+                        "events: stream one recording's events | "
+                        "serve: answer OSC queries | map: print the address map")
+    p.add_argument("input", nargs="?", default="./detected_events",
+                   help="Output directory, events.json, or phenological_calendar.json")
+    p.add_argument("--host", default="127.0.0.1", help="OSC target host")
+    p.add_argument("--port", type=int, default=57120, help="OSC target port")
+    p.add_argument("--listen-port", type=int, default=57121,
+                   help="Port the query server listens on (serve mode)")
+    p.add_argument("--days-per-second", type=float, default=1.0,
+                   help="Phenology playback rate (default: 1 day per second)")
+    p.add_argument("--loop", action="store_true",
+                   help="Repeat the season until interrupted")
 
-    # 1. Read audio
-    print("  Reading audio...")
-    audio, sr = sf.read(wav_path, dtype="float64")
-    if audio.ndim > 1:
-        audio_mono = np.mean(audio, axis=1)
-    else:
-        audio_mono = audio
-    duration_s = len(audio_mono) / sr
-    print(f"  Duration: {duration_s:.1f}s, SR: {sr}Hz")
 
-    # 2. Metadata
-    print("  Extracting metadata...")
-    recording_meta = get_recording_metadata(wav_path)
-    recording_meta["duration_s"] = duration_s
-    recording_meta["samplerate_hz"] = sr
+def _add_gallery_parser(sub) -> None:
+    p = sub.add_parser(
+        "gallery", help="rebuild the event-clip gallery",
+        description="Rebuild gallery.html from existing events.json files.")
+    p.add_argument("input", nargs="?", default="./detected_events",
+                   help="Output directory containing events.json files")
+    p.add_argument("-o", "--output", default="",
+                   help="Gallery path (default: <input>/gallery.html)")
+    p.add_argument("--title", default="Parliament of the Living",
+                   help="Gallery heading")
 
-    # 3. Spectral analysis
-    print("  Computing spectral features...")
-    spectral_result = analyze(audio_mono, sr, config.spectral)
 
-    # 4. File-level acoustic indices
-    print("  Computing acoustic indices...")
-    file_indices = compute_all_indices(
-        spectral_result["magnitude"], spectral_result["freqs"], config.spectral
+def _add_media_parser(sub) -> None:
+    p = sub.add_parser(
+        "media", help="whole-file spectrogram, video split, video -> GIF",
+        description="Utilities that used to be separate shell scripts.")
+    p.add_argument("action", choices=("spectrogram", "poster", "split", "gif"),
+                   help="spectrogram: whole-file video | poster: whole-file "
+                        "PNG + thumbnail | split: size-limited parts | "
+                        "gif: looping GIF")
+    p.add_argument("files", nargs="+", help="Input files")
+    p.add_argument("--size-limit", default="60M",
+                   help="split: max size per part (default: 60M)")
+    p.add_argument("--scale", default="scale=1080:-1",
+                   help="split: ffmpeg scale filter")
+    p.add_argument("--width", type=int, default=480, help="gif: output width")
+    p.add_argument("--fps", type=int, default=12, help="gif: frame rate")
+    p.add_argument("--max-freq", type=int, default=10000,
+                   help="spectrogram: max frequency in Hz")
+    p.add_argument("--color", default="cool", help="spectrogram: ffmpeg colormap")
+
+
+def _add_metadata_parser(sub) -> None:
+    p = sub.add_parser(
+        "metadata", help="AudioMoth metadata report",
+        description="Runs AudioMothRECS_LaLuna/audiomoth_processing.sh, which "
+                    "extracts AudioMoth headers and builds the metadata report.")
+    p.add_argument("input", help="Directory of AudioMoth recordings")
+
+
+# --- config assembly --------------------------------------------------------
+
+def config_from_detect_args(args: argparse.Namespace) -> Config:
+    """Turn parsed `detect` arguments into a Config."""
+    detector = DetectorConfig(
+        baseline_window_s=args.baseline_window,
+        pre_roll_s=args.pre_roll,
+        post_roll_s=args.post_roll,
+        max_clip_duration_s=args.max_clip_duration,
     )
+    if args.sensitivity:
+        apply_sensitivity(detector, args.sensitivity)
+    # Explicit flags win over the preset
+    if args.threshold is not None:
+        detector.threshold_factor = args.threshold
+    if args.min_event_duration is not None:
+        detector.min_event_duration_s = args.min_event_duration
+    if args.merge_gap is not None:
+        detector.merge_gap_s = args.merge_gap
 
-    # 5. Event detection
-    print("  Detecting events...")
-    events = detect_events(
-        spectral_result["flux"],
-        spectral_result["frame_times"],
-        duration_s,
-        config.detector,
-    )
-    print(f"  Found {len(events)} events")
-
-    # 6. Classify events and compute per-event features
-    print("  Classifying events...")
-    events_data = []
-    classifications = []
-    prev_flux = None
-
-    for i, event in enumerate(events):
-        # Get mean spectral features for this event's frames
-        f_start = event.onset_frame
-        f_end = min(event.offset_frame + 1, spectral_result["magnitude"].shape[0])
-
-        if f_end <= f_start:
-            f_end = f_start + 1
-        if f_end > spectral_result["magnitude"].shape[0]:
-            continue
-
-        event_mag = spectral_result["magnitude"][f_start:f_end]
-        event_centroid = float(np.mean(spectral_result["centroid"][f_start:f_end]))
-        event_flatness = float(np.mean(spectral_result["flatness"][f_start:f_end]))
-
-        # Band energies for this event
-        event_bands = {}
-        for band_name, full_series in spectral_result["band_energies"].items():
-            event_bands[band_name] = float(np.mean(full_series[f_start:f_end]))
-
-        # Per-event indices
-        event_indices = compute_all_indices(
-            event_mag, spectral_result["freqs"], config.spectral
-        )
-
-        # Classify
-        classification = classify_event(
-            event.onset_s, event.offset_s,
-            event_centroid, event_flatness, event.peak_flux,
-            event_bands,
-            recording_datetime=recording_meta.get("datetime"),
-            prev_event_flux=prev_flux,
-            config=config.spectral,
-        )
-        classifications.append(classification)
-        prev_flux = event.peak_flux
-
-        event_dict = {
-            "event_index": i + 1,
-            "onset_s": round(event.onset_s, 3),
-            "offset_s": round(event.offset_s, 3),
-            "clip_start_s": round(event.clip_start_s, 3),
-            "clip_end_s": round(event.clip_end_s, 3),
-            "duration_s": round(event.offset_s - event.onset_s, 3),
-            "peak_flux": round(event.peak_flux, 4),
-            "mean_flux": round(event.mean_flux, 4),
-            "centroid": round(event_centroid, 1),
-            "flatness": round(event_flatness, 4),
-            "band_energies": {k: round(v, 4) for k, v in event_bands.items()},
-            # Classification
-            "role": classification.role,
-            "domain": classification.domain,
-            "confidence": round(classification.confidence, 3),
-            "dominant_band": classification.dominant_band,
-            "reasoning": classification.reasoning,
-            # Indices
-            **event_indices,
-        }
-        events_data.append(event_dict)
-
-    # 7. Parliament summary
-    parliament = parliament_summary(classifications)
-    recording_meta["democracy_index"] = parliament.get("democracy_index", 0)
-
-    # 8. Write events.json
-    events_json = {
-        "source_file": wav_path,
-        "filename": filename,
-        "duration_s": round(duration_s, 3),
-        "sample_rate": sr,
-        "recording_datetime": recording_meta["datetime"].isoformat() if recording_meta.get("datetime") else None,
-        "habitat": recording_meta.get("habitat"),
-        "season": recording_meta.get("season"),
-        "temperature_c": recording_meta.get("temperature_c"),
-        "file_indices": file_indices,
-        "parliament": parliament,
-        "n_events": len(events_data),
-        "events": events_data,
-    }
-
-    json_path = str(Path(file_output_dir) / "events.json")
-    Path(json_path).write_text(
-        json.dumps(events_json, indent=2, default=str), encoding="utf-8"
-    )
-    print(f"  Wrote {json_path}")
-
-    if config.json_only:
-        return _build_result(wav_path, events_data, events_json, file_indices,
-                             recording_meta, parliament, file_output_dir)
-
-    # 9. Extract clips
-    if events:
-        print("  Extracting clips...")
-        clip_paths = extract_all_clips(wav_path, events, file_output_dir)
-
-        # Attach clip paths to events_data
-        for ed, cp in zip(events_data, clip_paths):
-            ed["clip_path"] = cp
-
-        # 10. Generate spectrogram videos
-        if not config.no_video:
-            print("  Generating spectrogram videos...")
-            rec_dt = recording_meta.get("datetime")
-            location = recording_meta.get("habitat", "AudioMoth Recording")
-            video_metas = []
-            for ed in events_data:
-                date_text = ""
-                if rec_dt:
-                    date_text = rec_dt.strftime("%d %B %Y %H:%M")
-                role_label = ed["role"].replace("_", " ").title()
-                label = f"{role_label} ({ed['confidence']:.0%}) | {ed['dominant_band']}"
-                video_metas.append({
-                    "location_text": location,
-                    "date_text": date_text,
-                    "classification_label": label,
-                })
-
-            video_paths = generate_all_videos(clip_paths, video_metas, config.video)
-            for ed, vp in zip(events_data, video_paths):
-                ed["video_path"] = vp
-            n_ok = sum(1 for v in video_paths if v)
-            print(f"  Generated {n_ok}/{len(video_paths)} videos")
-
-    # 11. OSC output
-    if not config.no_osc:
-        print("  Generating OSC output...")
-        osc_path = str(Path(file_output_dir) / "events.osc")
-        write_osc_bundle_file(events_data, recording_meta, osc_path)
-
-        scd_path = str(Path(file_output_dir) / "events_score.scd")
-        generate_supercollider_score(events_data, recording_meta, scd_path)
-        print(f"  Wrote {osc_path}")
-        print(f"  Wrote {scd_path}")
-
-        if config.osc.live:
-            send_live_osc(events_data, recording_meta, config.osc)
-
-    # 12. HTML report
-    print("  Generating report...")
-    report_path = str(Path(file_output_dir) / "report.html")
-    generate_event_report(
-        wav_path, events_data, parliament, file_indices,
-        recording_meta, report_path,
-    )
-    print(f"  Wrote {report_path}")
-
-    return _build_result(wav_path, events_data, events_json, file_indices,
-                         recording_meta, parliament, file_output_dir,
-                         report_path)
-
-
-def _build_result(wav_path, events_data, events_json, file_indices,
-                  recording_meta, parliament, output_dir,
-                  report_path="") -> dict:
-    """Build the result dict for a processed file."""
-    return {
-        "filename": Path(wav_path).name,
-        "filepath": wav_path,
-        "n_events": len(events_data),
-        "events": events_data,
-        "indices": file_indices,
-        "habitat": recording_meta.get("habitat", ""),
-        "season": recording_meta.get("season", ""),
-        "datetime": recording_meta.get("datetime"),
-        "parliament": parliament,
-        "band_energies": {k: float(np.mean([e.get("band_energies", {}).get(k, 0) for e in events_data])) for k in ["geophony", "biophony_low", "biophony_mid", "biophony_high", "ultrasonic"]} if events_data else {},
-        "ndsi": file_indices.get("ndsi", 0),
-        "output_dir": output_dir,
-        "report_path": report_path,
-    }
-
-
-def main(argv: list[str] | None = None) -> None:
-    args = parse_args(argv)
-
-    # Build config from args
-    config = Config(
+    return Config(
         spectral=SpectralConfig(),
-        detector=DetectorConfig(
-            baseline_window_s=args.baseline_window,
-            threshold_factor=args.threshold,
-            pre_roll_s=args.pre_roll,
-            min_event_duration_s=args.min_event_duration,
+        detector=detector,
+        clip=ClipConfig(
+            organize_by=args.organize_by,
+            make_video=not args.no_video,
+            make_poster=not args.no_poster,
+            make_gif=args.gif,
+            make_reels=not args.no_reels,
+            roles=args.roles,
+            domains=args.domains,
+            min_confidence=args.min_confidence,
         ),
-        video=VideoConfig(max_freq=args.max_freq),
+        video=VideoConfig(
+            max_freq=args.max_freq,
+            style_by_domain=not args.no_style_by_domain,
+        ),
+        phenology=PhenologyConfig(write_csv=not args.no_csv),
         osc=OSCConfig(
             host=args.osc_host,
             port=args.osc_port,
             live=args.osc_live,
+            days_per_second=args.days_per_second,
         ),
         output_dir=args.output_dir,
         no_video=args.no_video,
         json_only=args.json_only,
         no_osc=args.no_osc,
-        phenology=args.phenology,
+        build_phenology=args.phenology,
+        build_gallery=not args.no_gallery,
     )
 
-    # Find WAV files
-    wav_files = find_wav_files(args.input)
-    if not wav_files:
-        print(f"No WAV files found in: {args.input}")
-        sys.exit(1)
 
-    print(f"Found {len(wav_files)} WAV file(s)")
-    Path(config.output_dir).mkdir(parents=True, exist_ok=True)
+# --- command handlers -------------------------------------------------------
 
-    # Process each file
-    all_results = []
-    all_classifications = []
+def cmd_detect(args: argparse.Namespace) -> int:
+    from .pipeline import run_batch
 
-    for wav_path in wav_files:
-        result = process_single_file(wav_path, config)
-        all_results.append(result)
+    unknown_roles = [r for r in args.roles if r not in ROLES]
+    if unknown_roles:
+        print(f"Unknown role(s): {', '.join(unknown_roles)}")
+        print(f"Available: {', '.join(sorted(ROLES))}")
+        return 2
 
-    # Aggregate parliament across all files
-    all_events = []
-    for r in all_results:
-        all_events.extend(r.get("events", []))
+    try:
+        run_batch(args.inputs, config_from_detect_args(args))
+    except FileNotFoundError as exc:
+        print(exc)
+        return 1
+    return 0
 
-    # Build aggregate classifications for summary
-    from .classifier import Classification
-    all_cls = [
-        Classification(
-            role=e.get("role", "unknown"),
-            domain=e.get("domain", "unknown"),
-            confidence=e.get("confidence", 0),
-            dominant_band=e.get("dominant_band", "unknown"),
-            reasoning="",
+
+def cmd_phenology(args: argparse.Namespace) -> int:
+    from .pipeline import build_phenology, find_wav_files, run_batch
+
+    source = Path(args.input)
+    output_dir = args.output_dir or str(source)
+
+    results = []
+    if not args.reanalyze:
+        try:
+            results = store.load_results(str(source))
+        except FileNotFoundError as exc:
+            print(exc)
+            return 1
+
+    if results:
+        print(f"Loaded {len(results)} existing result(s) from {source}")
+        config = Config(
+            phenology=PhenologyConfig(write_csv=not args.no_csv),
+            osc=OSCConfig(days_per_second=args.days_per_second),
+            output_dir=output_dir,
+            no_osc=args.no_osc,
         )
-        for e in all_events
-    ]
-    aggregate_parliament = parliament_summary(all_cls)
+        build_phenology(results, config)
+        return 0
 
-    # Phenological calendar
-    if config.phenology and len(all_results) > 1:
-        print("\nGenerating phenological calendar...")
-        from .phenology import build_phenological_calendar, generate_phenology_html
+    if not find_wav_files(str(source)):
+        print(f"No events.json files and no recordings found in {source}")
+        print("Run `detect` first, or point this at a folder of WAV files.")
+        return 1
 
-        calendar = build_phenological_calendar(all_results)
+    print(f"No existing results in {source} — analysing recordings "
+          f"(metadata only, no clips).")
+    config = Config(
+        detector=DetectorConfig(threshold_factor=args.threshold),
+        phenology=PhenologyConfig(write_csv=not args.no_csv),
+        osc=OSCConfig(days_per_second=args.days_per_second),
+        output_dir=args.output_dir or "./detected_events",
+        json_only=True,
+        no_osc=args.no_osc,
+        build_phenology=True,
+        build_gallery=False,
+    )
+    run_batch(str(source), config)
+    return 0
 
-        cal_json_path = str(Path(config.output_dir) / "phenological_calendar.json")
-        Path(cal_json_path).write_text(
-            json.dumps(calendar, indent=2, default=str), encoding="utf-8"
-        )
-        print(f"  Wrote {cal_json_path}")
 
-        cal_html_path = str(Path(config.output_dir) / "phenological_calendar.html")
-        generate_phenology_html(calendar, cal_html_path)
-        print(f"  Wrote {cal_html_path}")
+def cmd_osc(args: argparse.Namespace) -> int:
+    from .osc_output import (send_live_osc, stream_phenology,
+                             write_osc_manifest, write_phenology_osc_file,
+                             generate_phenology_supercollider_score)
 
-        # Feed phenological events to combined OSC score
-        if not config.no_osc:
-            pheno_events = calendar.get("phenological_events", [])
-            combined_scd = str(Path(config.output_dir) / "parliament_osc_score.scd")
-            generate_supercollider_score(
-                all_events,
-                {"filename": "combined", "habitat": "multiple", "season": "multiple",
-                 "datetime": None, "temperature_c": None, "democracy_index":
-                 aggregate_parliament.get("democracy_index", 0)},
-                combined_scd,
-                phenology_events=pheno_events,
-            )
-            print(f"  Wrote {combined_scd}")
+    config = OSCConfig(
+        host=args.host, port=args.port, listen_port=args.listen_port,
+        days_per_second=args.days_per_second, loop=args.loop,
+    )
 
-    # Summary report for batch processing
-    if len(all_results) > 1:
-        summary_path = str(Path(config.output_dir) / "summary_report.html")
-        generate_summary_report(all_results, aggregate_parliament, summary_path)
-        print(f"\nWrote batch summary: {summary_path}")
+    if args.mode == "map":
+        target = Path(args.input)
+        out = (target / "osc_address_map.txt" if target.is_dir()
+               else Path("osc_address_map.txt"))
+        write_osc_manifest(str(out), config)
+        print(Path(out).read_text(encoding="utf-8"))
+        print(f"(written to {out})")
+        return 0
 
-    # Final summary
-    total_events = sum(r["n_events"] for r in all_results)
-    print(f"\n{'='*60}")
-    print(f"Complete: {len(all_results)} file(s), {total_events} events detected")
-    print(f"Parliament democracy index: {aggregate_parliament.get('democracy_index', 0):.3f}")
-    print(f"Output: {config.output_dir}")
-    print(f"{'='*60}")
+    if args.mode == "events":
+        results = store.load_results(args.input)
+        if not results:
+            print(f"No events.json found under {args.input}")
+            return 1
+        for result in results:
+            meta = {
+                "filename": result.get("filename", ""),
+                "habitat": result.get("habitat", ""),
+                "season": result.get("season", ""),
+                "datetime": result.get("datetime"),
+                "temperature_c": result.get("temperature_c"),
+                "democracy_index": result.get("parliament", {})
+                                         .get("democracy_index", 0),
+            }
+            print(f"\n{result.get('filename')}")
+            send_live_osc(result.get("events", []), meta, config)
+        return 0
+
+    calendar_path = _resolve_calendar(args.input)
+    if not calendar_path:
+        print(f"No phenological_calendar.json found at/under {args.input}")
+        print("Build one with: ./bioacoustics.sh  ->  Phenological data")
+        return 1
+
+    if args.mode == "serve":
+        from .osc_server import serve
+        serve(calendar_path, config)
+        return 0
+
+    from .osc_server import load_calendar
+    calendar = load_calendar(calendar_path)
+
+    if args.mode == "phenology":
+        stream_phenology(calendar, config)
+        return 0
+
+    # export
+    out_dir = Path(calendar_path).parent
+    osc_path = out_dir / "phenology.osc"
+    scd_path = out_dir / "phenology_score.scd"
+    map_path = out_dir / "osc_address_map.txt"
+    write_phenology_osc_file(calendar, str(osc_path), config)
+    generate_phenology_supercollider_score(calendar, str(scd_path), config)
+    write_osc_manifest(str(map_path), config)
+    print(f"Wrote {osc_path}")
+    print(f"Wrote {scd_path}")
+    print(f"Wrote {map_path}")
+    return 0
+
+
+def _resolve_calendar(target: str) -> str:
+    path = Path(target)
+    if path.is_file() and path.name.endswith(".json"):
+        return str(path)
+    if path.is_dir():
+        return store.find_calendar(str(path))
+    return ""
+
+
+def cmd_gallery(args: argparse.Namespace) -> int:
+    from .gallery import generate_gallery
+
+    try:
+        results = store.load_results(args.input)
+    except FileNotFoundError as exc:
+        print(exc)
+        return 1
+    if not results:
+        print(f"No events.json found under {args.input}")
+        return 1
+
+    reels: dict[str, str] = {}
+    for result in results:
+        reels.update(result.get("reels", {}))
+
+    output = args.output or str(Path(args.input) / "gallery.html")
+    path = generate_gallery(results, output, reels=reels,
+                            phenology_link=store.find_calendar(args.input)
+                            .replace(".json", ".html"),
+                            title=args.title)
+    n_clips = sum(1 for r in results for e in r.get("events", [])
+                  if e.get("clip_path") or e.get("video_path"))
+    print(f"Wrote {path} ({n_clips} clips from {len(results)} recording(s))")
+    return 0
+
+
+def cmd_media(args: argparse.Namespace) -> int:
+    from .media import have_ffmpeg, split_video, video_to_gif
+    from .metadata import get_recording_metadata
+    from .video import render_clip_poster, whole_file_video
+
+    if not have_ffmpeg():
+        print("ffmpeg not found on PATH. Install it first (brew install ffmpeg).")
+        return 1
+
+    for path in args.files:
+        print(f"\n{Path(path).name}")
+        try:
+            if args.action == "spectrogram":
+                config = VideoConfig(max_freq=args.max_freq, color=args.color,
+                                     style_by_domain=False)
+                meta = get_recording_metadata(path)
+                dt = meta.get("datetime")
+                out = whole_file_video(
+                    path,
+                    location_text=meta.get("habitat") or "AudioMoth Recording",
+                    date_text=dt.strftime("%d %B %Y %H:%M") if dt else "",
+                    config=config,
+                )
+                print(f"  Wrote {out}")
+            elif args.action == "poster":
+                config = VideoConfig(max_freq=args.max_freq,
+                                     poster_color=args.color)
+                stem = Path(path).with_suffix("")
+                poster, thumb = render_clip_poster(
+                    path, f"{stem}-fullsize.png", f"{stem}-thumbnail.png", config)
+                for produced in (poster, thumb):
+                    if produced:
+                        print(f"  Wrote {produced}")
+                if not poster:
+                    print("  Failed: showspectrumpic produced nothing")
+            elif args.action == "split":
+                parts = split_video(path, args.size_limit, args.scale)
+                print(f"  {len(parts)} part(s)")
+            else:
+                out = video_to_gif(path, width=args.width, fps=args.fps)
+                print(f"  Wrote {out}")
+        except Exception as exc:  # noqa: BLE001 - keep going through the batch
+            print(f"  Failed: {exc}")
+    return 0
+
+
+def cmd_metadata(args: argparse.Namespace) -> int:
+    script = REPO_ROOT / "AudioMothRECS_LaLuna" / "audiomoth_processing.sh"
+    if not script.is_file():
+        print(f"Missing {script}")
+        return 1
+    print(f"Running {script.name} on {args.input}")
+    return subprocess.call(["bash", str(script), args.input],
+                           cwd=str(script.parent))
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from .media import find_font, have_ffmpeg
+    from .video import check_renderer
+
+    print("Bioacoustic toolkit — environment check")
+    print("-" * 46)
+    print(f"Python           {sys.version.split()[0]} ({sys.executable})")
+    if sys.version_info < (3, 10):
+        print("  ! Python 3.10+ is required.")
+
+    for module in ("numpy", "scipy", "soundfile", "metamoth", "pythonosc"):
+        try:
+            __import__(module)
+            print(f"{module:<16} ok")
+        except ImportError:
+            print(f"{module:<16} MISSING  (pip install -r requirements-detector.txt)")
+
+    ok, detail = check_renderer()
+    print(f"{'ffmpeg':<16} {'ok' if ok else 'MISSING'}  {detail}")
+    if not have_ffmpeg():
+        print("  ! Without ffmpeg you still get clips, JSON, OSC and phenology,")
+        print("    but no spectrogram videos, posters or GIFs.")
+        print("    macOS: brew install ffmpeg")
+    elif not find_font():
+        print("  Note: no bundled font found; drawtext will use fontconfig's default.")
+
+    script = REPO_ROOT / "AudioMothRECS_LaLuna" / "audiomoth_processing.sh"
+    print(f"{'metadata tool':<16} {'ok' if script.is_file() else 'MISSING'}")
+    print("-" * 46)
+    print(f"Event types known: {len(ROLES)}")
+    return 0
+
+
+def cmd_wizard(args: argparse.Namespace) -> int:
+    from .wizard import run
+
+    return run()
+
+
+HANDLERS = {
+    "detect": cmd_detect,
+    "phenology": cmd_phenology,
+    "osc": cmd_osc,
+    "gallery": cmd_gallery,
+    "media": cmd_media,
+    "metadata": cmd_metadata,
+    "doctor": cmd_doctor,
+    "wizard": cmd_wizard,
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    # Backward compatibility: `detect_events.sh recording.WAV --threshold 1.5`
+    if argv and argv[0] not in SUBCOMMANDS and not argv[0].startswith("-"):
+        argv.insert(0, "detect")
+
+    parser = build_parser()
+    if not argv:
+        return cmd_wizard(argparse.Namespace())
+
+    args = parser.parse_args(argv)
+    if not args.command:
+        parser.print_help()
+        return 0
+
+    try:
+        return HANDLERS[args.command](args)
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        return 130
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
