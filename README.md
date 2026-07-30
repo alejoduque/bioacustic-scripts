@@ -1,10 +1,13 @@
 # Bioacoustic Scripts
 
+**English** · [Español](README.es.md)
+
 A toolkit for turning AudioMoth field recordings into **phenological data that can be driven over OSC**.
 
 It listens for moments when the soundscape changes — a species starting up, rain arriving, the dawn chorus turning over — cuts a short video clip of each one, classifies it by ecological role, and accumulates those events into a dated calendar that an instrument can follow: Eurorack, ILDA laser, SuperCollider, anything that speaks OSC.
 
 **Live gallery:** https://etc.altred.xyz/staticbioacustics/index.html
+**Field calibration protocol:** [docs/CALIBRATION.md](docs/CALIBRATION.md) — what to do when the real recordings arrive
 
 ---
 
@@ -456,7 +459,7 @@ A path as the first argument means `detect`, so `./detect_events.sh rec.WAV --th
       --no-osc                skip OSC and SuperCollider output
 ```
 
-Sensitivity presets: **subtle** (1.5 MAD, many events), **balanced** (2.5 MAD, the default), **salient** (4.0 MAD, only strong shifts).
+The three sensitivity presets and what they change are tabulated under [Event detection](#event-detection).
 
 ---
 
@@ -503,8 +506,8 @@ The default is matched to bird syllables (50–200 ms); the ultrasonic setting t
 | Feature | Definition | Reads as |
 |---|---|---|
 | Spectral flux | $\Phi(t) = \sqrt{\sum_k \max(0,\,\lvert X(t,k)\rvert - \lvert X(t-1,k)\rvert)^2}$ | rate of spectral *change*; half-wave rectified so only new energy counts. **This is the detection signal.** |
-| Spectral centroid | $C(t) = \sum_k f_k \lvert X\rvert \big/ \sum_k \lvert X\rvert$ | brightness, in Hz |
-| Spectral flatness | $F(t) = \exp\!\big(\overline{\ln \lvert X\rvert^2}\big) \big/ \overline{\lvert X\rvert^2}$ | 1.0 = white noise, 0.0 = pure tone (Wiener entropy) |
+| Spectral centroid | $C(t) = \left(\sum_k f_k \lvert X \rvert\right) / \left(\sum_k \lvert X \rvert\right)$ | brightness, in Hz |
+| Spectral flatness | $F(t) = \exp\left(\overline{\ln \lvert X \rvert^2}\right) / \overline{\lvert X \rvert^2}$ | 1.0 = white noise, 0.0 = pure tone (Wiener entropy) |
 | Band energy | $E_b(t) = \sum_{f_k \in b} \lvert X(t,k)\rvert^2$ | power per ecological band |
 
 Two caveats that matter for interpretation and for any model trained on these: **centroid and flatness are both global** — computed across the entire spectrum, not within the event's own band. A band-limited event therefore reports a flatness that reflects how much of the *whole* spectrum it fills, and a centroid pulled upward by the wideband noise floor. See the rain example above for measured numbers.
@@ -525,7 +528,7 @@ With `--ultrasonic` the last band is replaced by `ultrasonic_low` (16–40 kHz),
 
 An event is a moment when the spectrum *changes*, measured against what the recording has been doing recently:
 
-$$\Phi(t) > \operatorname{median}_{W}\Phi + \kappa \cdot 1.4826 \cdot \operatorname{MAD}_{W}\Phi$$
+$$\Phi(t) > \mathrm{median}_{W}(\Phi) + \kappa \cdot 1.4826 \cdot \mathrm{MAD}_{W}(\Phi)$$
 
 where *W* is a **60-second causal window** (look-back only, so detection could run live), κ is `--threshold` (default 2.5), and 1.4826 is the constant that makes the MAD a consistent estimator of the standard deviation for normally distributed data.
 
@@ -773,7 +776,7 @@ ffmpeg is missing — the run says so as it goes and produces everything else. I
 The path is checked as given, relative to where you are standing (not to the repo). Quote paths containing spaces or accents: `./detect_events.sh "Epoca lluvias/Bosque de galería y-o ripario/"`. Both `.WAV` and `.wav` are found, recursively.
 
 **Too many or too few events.**
-Start with `--sensitivity subtle | balanced | salient`, and only reach for `--threshold` (MAD units — lower is more sensitive) if the presets do not land where you want. `--min-event-duration` discards brief blips; `--merge-gap` decides how far apart two triggers must be to count as separate events. Probe with `--json-only` first, it costs seconds.
+Start with `--sensitivity subtle | balanced | salient`, and only reach for `--threshold` (MAD units — lower is more sensitive) if the presets do not land where you want. `--min-event-duration` discards brief blips; `--merge-gap` decides how far apart two triggers must be to count as separate events. Probe with `--json-only` first — same analysis, none of the rendering. See [Event detection](#event-detection) for what κ actually measures.
 
 **"Only one recording — the calendar needs several to compare."**
 Phenology is a cross-recording product. It needs recordings from at least two different days, each carrying a parseable timestamp — either an AudioMoth `YYYYMMDD_HHMMSS.WAV` filename or intact AudioMoth metadata. The run reports how many of your files have usable timestamps.
