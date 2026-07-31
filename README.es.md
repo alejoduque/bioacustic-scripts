@@ -431,7 +431,7 @@ Una ruta como primer argumento equivale a `detect`, así que `./detect_events.sh
 
 ```
   -o, --output-dir DIR        dónde van los resultados (./detected_events)
-      --sensitivity NAME      subtle | balanced | salient
+      --sensitivity NAME      subtle | balanced | salient | dense
       --threshold N           umbral de flujo espectral en unidades MAD (2.5)
       --pre-roll N            segundos de contexto antes del inicio (20)
       --post-roll N           segundos de contexto después del final (10)
@@ -558,6 +558,24 @@ Como la línea base se adapta continuamente, los fondos no estacionarios —la l
 | `subtle` | 1.5 | 1.0 s | 3 s |
 | `balanced` (por defecto) | 2.5 | 2.0 s | 5 s |
 | `salient` | 4.0 | 3.0 s | 8 s |
+| `dense` | 8.0 | 0.3 s | 0.25 s |
+
+`dense` existe porque los tres primeros fallan en un paisaje sonoro
+continuamente activo. κ se mide en desviaciones estándar robustas del flujo
+*local*, así que se adapta al volumen, pero no a cuán incesantemente cambia un
+paisaje sonoro. Ajustado sobre 2.1 horas de grabaciones de amanecer y atardecer
+de Manakai a 192 kHz:
+
+| Ajuste | eventos/h | mediana | p90 | cobertura |
+|---|---|---|---|---|
+| `balanced` (κ 2.5, fusión 1 s) | 24 | 7.4 s | **499 s** | **98 %** |
+| `dense` (κ 8, fusión 0.25 s) | 619 | 0.9 s | 5.8 s | 46 % |
+
+Una cobertura del 98 % significa que el detector solo está informando "aquí hay
+sonido", y un evento de 499 segundos no cabe en el clip que debe contenerlo. En
+una hora de amanecer, el mismo archivo da 12 eventos con mediana de 108 s y
+máximo de 1780 s con `balanced`, frente a 548 eventos con mediana de 0.8 s y
+máximo de 47 s con `dense`.
 
 Nótese que κ está en **desviaciones estándar robustas del flujo local**, no en un nivel absoluto: el mismo ajuste se comporta de forma comparable en un sitio ruidoso y en uno silencioso, que es lo que hace significativa la comparación entre sitios.
 

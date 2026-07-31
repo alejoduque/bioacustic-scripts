@@ -294,11 +294,32 @@ SENSITIVITY_PRESETS: dict[str, dict] = {
         "merge_gap_s": 8.0,
         "description": "Only strong shifts. Few, high-confidence clips.",
     },
+    "dense": {
+        "threshold_factor": 8.0,
+        "min_event_duration_s": 0.3,
+        "merge_gap_s": 0.25,
+        "description": "For continuously active soundscapes (dawn chorus, "
+                       "insect-saturated nights) where the others merge "
+                       "everything into one event.",
+    },
 }
 
 
 def apply_sensitivity(detector: DetectorConfig, preset: str) -> DetectorConfig:
-    """Apply a named sensitivity preset to a DetectorConfig in place."""
+    """
+    Apply a named sensitivity preset to a DetectorConfig in place.
+
+    A note on `dense`, measured on 2.1 hours of Manakai dawn and dusk
+    recordings. The threshold is in MAD units of the LOCAL flux, so it adapts
+    to level — but not to how continuously a soundscape changes. In a dawn
+    chorus the flux is not only loud but restlessly variable, so the adaptive
+    baseline rises with it and ordinary settings never stop triggering: at the
+    balanced default the 90th-percentile event ran 499 s and events covered
+    98% of the recording, which is the detector saying only "sound exists".
+    At threshold 8.0 with a 0.25 s merge gap the same recordings give a 90th
+    percentile of 5.8 s and 46% coverage — events that fit inside their clip
+    and stand apart from the background.
+    """
     spec = SENSITIVITY_PRESETS.get(preset)
     if not spec:
         return detector

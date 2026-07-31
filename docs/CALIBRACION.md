@@ -62,6 +62,63 @@ análisis por tramos.
 
 ---
 
+### Ajustes calibrados para Manakai (2026-07-31)
+
+Se barrió umbral × brecha de fusión sobre 2.1 horas de grabaciones crudas —los
+dos archivos de amanecer de 60 minutos y el de atardecer—, transmitiendo cada
+uno una sola vez y re-detectando contra las series en caché, de modo que 35
+combinaciones cuestan apenas más que una pasada.
+
+El primer barrido **no encontró nada utilizable**, lo cual fue informativo:
+juzgaba el umbral por clips-por-hora, y en el pipeline de ventana fija esos son
+controles independientes.
+
+  umbral + brecha de fusión  deciden DÓNDE están los eventos y cuánto duran
+  min_separation             decide CUÁNTOS de ellos se vuelven clips
+
+Separados, la respuesta es clara. Para la geometría del evento —un evento debe
+caber en el clip de 60 s que lo contendrá, y la cobertura debe quedar bien por
+debajo del 100 % o el detector solo informa que hay sonido:
+
+| κ | brecha | eventos/h | mediana | p90 | cobertura |
+|---|---|---|---|---|---|
+| 2.5 | 1.0 s | 24 | 7.4 s | 499 s | 98 % |
+| 4.0 | 0.25 s | 441 | 1.2 s | 13.4 s | 84 % |
+| 6.0 | 0.25 s | 668 | 0.9 s | 5.9 s | 64 % |
+| **8.0** | **0.25 s** | **619** | **0.9 s** | **5.8 s** | **46 %** |
+| 12.0 | 0.25 s | 498 | 0.8 s | 3.6 s | 24 % |
+
+κ = 8.0 con una brecha de 0.25 s es el ajuste más sensible que mantiene los
+eventos acotados y distinguibles — disponible como `--sensitivity dense`. Nótese
+que subir κ más allá de 6 *aumenta* el conteo de eventos antes de reducirlo: un
+umbral más bajo fusiona cantos vecinos en un evento largo en lugar de encontrar
+más.
+
+Luego la separación fija el presupuesto de revisión de forma independiente:
+
+| `--min-separation` | clips/h | tiempo de revisión por hora grabada |
+|---|---|---|
+| 30 s | 91 | 91 min — más clip que grabación |
+| 120 s | 28 | 28 min |
+| **300 s** | **12** | **12 min — compresión 5:1** |
+| 600 s | 6 | 6 min |
+
+Recomendado para este sitio:
+
+```bash
+./detect_events.sh <grabaciones>/ --ultrasonic --sensitivity dense \
+    --clip-duration 60 --clip-pre 30 --min-separation 300
+```
+
+En una hora de amanecer eso produce 548 eventos acotados (mediana 0.8 s, máximo
+47 s) y 12 clips de un minuto, frente a 12 eventos de mediana 108 s y máximo
+1780 s con los valores por defecto. **No** arregla la clasificación: 393 de esos
+548 siguen cayendo a `community_shift`, y los 116 eventos `bat_echolocation`
+siguen siendo candidatos y no conteos, por las razones de las secciones
+anteriores.
+
+---
+
 ## Asunto 1 — La frecuencia de muestreo debe decidirse antes del despliegue
 
 **La decisión.** A qué frecuencia de muestreo desplegar los AudioMoth, por sitio y por temporada.

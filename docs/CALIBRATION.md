@@ -58,6 +58,60 @@ recordings need either chunked processing or analysis in slices.
 
 ---
 
+### Tuned settings for Manakai (2026-07-31)
+
+Swept threshold × merge-gap over 2.1 hours of raw recordings — both 60-minute
+dawn files and the dusk file, streamed once each and re-detected against the
+cached series, so 35 combinations cost barely more than one pass.
+
+The first sweep found **nothing workable**, which was informative: it judged
+threshold by clips-per-hour, and in the fixed-window pipeline those are
+independent controls.
+
+  threshold + merge_gap  decide WHERE events are and how long they run
+  min_separation         decides HOW MANY of them become clips
+
+Separated, the answer is clear. For event geometry — an event should fit inside
+the 60 s clip meant to hold it, and coverage should stay well below 100 % or the
+detector is only reporting that sound exists:
+
+| κ | merge gap | events/h | median | p90 | coverage |
+|---|---|---|---|---|---|
+| 2.5 | 1.0 s | 24 | 7.4 s | 499 s | 98 % |
+| 4.0 | 0.25 s | 441 | 1.2 s | 13.4 s | 84 % |
+| 6.0 | 0.25 s | 668 | 0.9 s | 5.9 s | 64 % |
+| **8.0** | **0.25 s** | **619** | **0.9 s** | **5.8 s** | **46 %** |
+| 12.0 | 0.25 s | 498 | 0.8 s | 3.6 s | 24 % |
+
+κ = 8.0 with a 0.25 s merge gap is the most sensitive setting that keeps events
+bounded and distinguishable — available as `--sensitivity dense`. Note that
+raising κ past 6 *increases* the event count before it falls: a lower threshold
+merges neighbouring calls into one long event rather than finding more of them.
+
+Then separation sets the review budget independently, at that fixed geometry:
+
+| `--min-separation` | clips/h | review time per hour recorded |
+|---|---|---|
+| 30 s | 91 | 91 min — more clip than recording |
+| 120 s | 28 | 28 min |
+| **300 s** | **12** | **12 min — a 5:1 compression** |
+| 600 s | 6 | 6 min |
+
+Recommended for this site:
+
+```bash
+./detect_events.sh <recordings>/ --ultrasonic --sensitivity dense \
+    --clip-duration 60 --clip-pre 30 --min-separation 300
+```
+
+On one dawn hour that yields 548 bounded events (median 0.8 s, max 47 s) and 12
+one-minute clips, against 12 events of median 108 s and max 1780 s at the
+defaults. It does **not** fix the classification: 393 of those 548 still fall
+through to `community_shift`, and the 116 `bat_echolocation` events remain
+candidates rather than counts, for the reasons in the sections above.
+
+---
+
 ## Open item 1 — Recorder sample rate must be chosen before deployment
 
 **The decision.** What AudioMoth sample rate to deploy at, per site and per season.

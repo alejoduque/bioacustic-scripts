@@ -429,7 +429,7 @@ A path as the first argument means `detect`, so `./detect_events.sh rec.WAV --th
 
 ```
   -o, --output-dir DIR        where results go (./detected_events)
-      --sensitivity NAME      subtle | balanced | salient
+      --sensitivity NAME      subtle | balanced | salient | dense
       --threshold N           spectral flux threshold in MAD units (2.5)
       --pre-roll N            seconds of context before onset (20)
       --post-roll N           seconds of context after offset (10)
@@ -556,6 +556,23 @@ Because the baseline adapts continuously, non-stationary backgrounds — rain ar
 | `subtle` | 1.5 | 1.0 s | 3 s |
 | `balanced` (default) | 2.5 | 2.0 s | 5 s |
 | `salient` | 4.0 | 3.0 s | 8 s |
+| `dense` | 8.0 | 0.3 s | 0.25 s |
+
+`dense` exists because the first three all fail on a continuously active
+soundscape. κ is measured in robust standard deviations of the *local* flux, so
+it adapts to loudness — but not to how restlessly a soundscape changes. Tuned on
+2.1 hours of Manakai dawn and dusk recordings at 192 kHz:
+
+| Setting | events/h | median | p90 | coverage |
+|---|---|---|---|---|
+| `balanced` (κ 2.5, merge 1 s) | 24 | 7.4 s | **499 s** | **98 %** |
+| `dense` (κ 8, merge 0.25 s) | 619 | 0.9 s | 5.8 s | 46 % |
+
+98 % coverage means the detector is only reporting "sound exists here", and a
+499-second event cannot fit the clip meant to hold it. On one dawn hour the
+same file gives 12 events with a median of 108 s and a maximum of 1780 s at
+`balanced`, against 548 events with a median of 0.8 s and a maximum of 47 s at
+`dense`.
 
 Note that κ is in **robust standard deviations of the local flux**, not an absolute level — the same setting behaves comparably at a loud site and a quiet one, which is what makes cross-site comparison meaningful.
 

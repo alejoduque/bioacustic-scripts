@@ -316,7 +316,11 @@ def config_from_detect_args(args: argparse.Namespace) -> Config:
     )
     if args.ultrasonic:
         # Explicit timing flags win over the mode's bat-scale defaults.
-        apply_ultrasonic(config, adjust_timing=(args.merge_gap is None
+        # A named preset counts as an explicit choice, like the flags do:
+        # otherwise --sensitivity dense --ultrasonic would silently discard
+        # the preset's timings in favour of the mode's generic ones.
+        apply_ultrasonic(config, adjust_timing=(args.sensitivity is None
+                                                and args.merge_gap is None
                                                 and args.min_event_duration is None))
     return config
 
