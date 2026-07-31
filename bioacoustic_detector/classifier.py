@@ -85,6 +85,8 @@ RAIN_MIN_DURATION_S = 30.0
 WIND_MIN_DURATION_S = 10.0
 COMMUNITY_SHIFT_BANDS = 3      # active bands needed to call it a community shift
 COMMUNITY_SHIFT_DOMINANCE = 0.4  # ...and no single band may exceed this share
+BAT_PASS_MAX_DURATION_S = 5.0     # above this, ultrasonic energy is not a pass
+INSECT_CHORUS_MIN_DURATION_S = 10.0  # sustained ultrasonic = stridulating insects
 
 
 def is_ultrasonic_band(band: str) -> bool:
@@ -225,13 +227,18 @@ def _classify_features(hour: int, duration: float,
     # rules because echolocation is unambiguous from its band alone — no bird,
     # frog or engine puts its dominant energy above 16 kHz.
     if is_bat_band(dominant_band):
-        if duration < 5:
-            return ("bat_echolocation", 0.8,
-                    f"Brief ultrasonic pulse train in {dominant_band} "
-                    f"(centroid={centroid:.0f}Hz)")
-        return ("bat_echolocation", 0.65,
-                f"Sustained ultrasonic activity in {dominant_band} — "
-                f"a foraging bout or several passes")
+        if duration > INSECT_CHORUS_MIN_DURATION_S:
+            return ("insect_chorus", 0.6,
+                    f"Sustained energy in {dominant_band} for {duration:.0f}s - "
+                    f"too long for echolocation; high-frequency insect chorus")
+        if duration <= BAT_PASS_MAX_DURATION_S:
+            return ("bat_echolocation", 0.5,
+                    f"Brief ultrasonic event in {dominant_band} "
+                    f"(centroid={centroid:.0f}Hz) - candidate bat pass, but the "
+                    f"same band carries katydids; verify before trusting")
+        return ("insect_chorus", 0.4,
+                f"Ultrasonic energy of intermediate duration ({duration:.0f}s) "
+                f"in {dominant_band}")
 
     # Biophonic classification by time of day and frequency
     # Dawn chorus: 4:30-7:00, mid-frequency birds

@@ -287,10 +287,16 @@ Verified on a synthetic 192 kHz recording containing four deliberately different
 
 | Synthesized | Detected at | Band | Role |
 |---|---|---|---|
-| 60→25 kHz FM sweeps + feeding buzz | 0.07 s | `ultrasonic_mid` | `bat_echolocation` |
+| 60→25 kHz FM sweeps + feeding buzz | 0.07 s | `ultrasonic_mid` | `insect_chorus` * |
 | 85 kHz CF tone | 10.34 s | `ultrasonic_high` | `bat_echolocation` |
 | 12 kHz katydid band | 14.05 s | `biophony_high` | `insect_chorus` |
 | 30→18 kHz sweeps | 24.00 s | `ultrasonic_low` | `bat_echolocation` |
+| 60→25 kHz second pass | 17.40 s | `ultrasonic_mid` | `bat_echolocation` |
+
+\* This detection merges the katydid band with the bat sweeps into one 5.8 s
+event, and sustained ultrasonic energy is now read as insect chorus rather than
+echolocation — see the field finding below. The band is right; the role reflects
+the longer of the two things inside the merged event.
 
 The same file analysed **without** `--ultrasonic` yielded two `insect_chorus` events and no bats at all — the katydids survived downsampling, everything else was filtered away.
 

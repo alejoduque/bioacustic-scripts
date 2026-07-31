@@ -289,10 +289,16 @@ Verificado sobre una grabación sintética de 192 kHz con cuatro fuentes deliber
 
 | Sintetizado | Detectado en | Banda | Rol |
 |---|---|---|---|
-| Barridos FM 60→25 kHz + zumbido de alimentación | 0.07 s | `ultrasonic_mid` | `bat_echolocation` |
+| Barridos FM 60→25 kHz + zumbido de alimentación | 0.07 s | `ultrasonic_mid` | `insect_chorus` * |
 | Tono CF de 85 kHz | 10.34 s | `ultrasonic_high` | `bat_echolocation` |
 | Banda de esperanza a 12 kHz | 14.05 s | `biophony_high` | `insect_chorus` |
 | Barridos 30→18 kHz | 24.00 s | `ultrasonic_low` | `bat_echolocation` |
+| Segundo paso 60→25 kHz | 17.40 s | `ultrasonic_mid` | `bat_echolocation` |
+
+\* Esta detección fusiona la banda de esperanza con los barridos de murciélago en
+un solo evento de 5.8 s, y la energía ultrasónica sostenida ahora se lee como coro
+de insectos y no como ecolocación — ver el hallazgo de campo abajo. La banda es
+correcta; el rol refleja lo más largo de las dos cosas dentro del evento fusionado.
 
 El mismo archivo analizado **sin** `--ultrasonic` arrojó dos eventos `insect_chorus` y ningún murciélago: las esperanzas sobrevivieron al submuestreo, todo lo demás se filtró.
 

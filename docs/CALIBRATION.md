@@ -10,6 +10,54 @@ Two things are open. Everything else follows from them.
 
 ---
 
+## First field recordings (Manakai, October 2024)
+
+The first real AudioMoth data from the study site: 2.2 hours, six of seven files
+recorded at **192 kHz** — a deliberate ultrasonic deployment. Two 60-minute
+dawn files (04:00, 05:00), plus shorter excerpts the recordist had already named
+`paso murcielagos` (bat pass) and `buho` (owl). Those names are informal labels,
+and they made two things testable immediately.
+
+**What worked.** On the file named as a bat pass, ultrasonic mode detected
+`bat_echolocation` in `ultrasonic_mid` at 102.7 s and 111.3 s — brief events,
+1.7 s and 3.8 s. That is the first confirmation of ultrasonic mode against a
+human-identified recording rather than a synthetic fixture.
+
+**What broke, and how it was found.** The file named for an owl produced eight
+`bat_echolocation` events, two of them lasting **36 and 40 seconds**. No bat
+echolocates for 36 seconds. Rendering those events and looking at them settled
+it: they are unbroken horizontal bands at 17-30 kHz — a **katydid chorus**.
+Genuine echolocation is visible in the same recording as brief vertical sweeps
+above 40 kHz, but it is not what carries the band's energy.
+
+The rule was the problem, and it was the same error as the geophony one in the
+opposite direction: it assigned `bat_echolocation` to *any* event whose dominant
+band was ultrasonic, including the branch that explicitly returned "sustained
+ultrasonic activity - a foraging bout". In a neotropical forest the 16-40 kHz
+band is occupied continuously by stridulating insects that are far louder in
+aggregate than any bat. The band table's own comment said katydids live there;
+the rule ignored it.
+
+**The fix, from the images rather than from a guess.** Duration separates them —
+a pass lasts one to three seconds, a chorus runs for minutes. Sustained
+ultrasonic energy (>10 s) now classifies as `insect_chorus`; brief events remain
+`bat_echolocation` but at 0.5 confidence with reasoning that says the same band
+carries katydids and the call needs verifying. On the owl file this moved five
+events from bat to insect and left the genuinely brief ones alone.
+
+**Still open.** Telling a katydid from a bat *within* a short ultrasonic event
+needs the pulse-structure work that is currently blocked on modulation
+resolution. Until then, treat `bat_echolocation` as a candidate list to review,
+not a count.
+
+**A practical limit found at the same time.** The two 60-minute 192 kHz files
+cannot be processed as-is: at the native rate with a 256-sample hop they need
+about 11 GB for the magnitude array plus 5.5 GB for the audio, against 17 GB of
+RAM. Analysis currently holds the whole spectrogram in memory. Long ultrasonic
+recordings need either chunked processing or analysis in slices.
+
+---
+
 ## Open item 1 — Recorder sample rate must be chosen before deployment
 
 **The decision.** What AudioMoth sample rate to deploy at, per site and per season.

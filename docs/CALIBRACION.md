@@ -10,6 +10,58 @@ Hay dos asuntos abiertos. Todo lo demás se deriva de ellos.
 
 ---
 
+## Primeras grabaciones de campo (Manakai, octubre 2024)
+
+Los primeros datos reales de AudioMoth del sitio de estudio: 2.2 horas, seis de
+siete archivos grabados a **192 kHz** — un despliegue ultrasónico deliberado. Dos
+archivos de 60 minutos al amanecer (04:00, 05:00), más extractos cortos que quien
+grabó ya había nombrado `paso murcielagos` y `buho`. Esos nombres son etiquetas
+informales, y volvieron dos cosas comprobables de inmediato.
+
+**Lo que funcionó.** En el archivo nombrado como paso de murciélagos, el modo
+ultrasónico detectó `bat_echolocation` en `ultrasonic_mid` a los 102.7 s y
+111.3 s — eventos breves, de 1.7 s y 3.8 s. Es la primera confirmación del modo
+ultrasónico contra una grabación identificada por una persona y no contra
+material sintético.
+
+**Lo que falló, y cómo se detectó.** El archivo nombrado por el búho produjo ocho
+eventos `bat_echolocation`, dos de ellos de **36 y 40 segundos**. Ningún
+murciélago ecolocaliza durante 36 segundos. Renderizar esos eventos y mirarlos lo
+resolvió: son bandas horizontales ininterrumpidas entre 17 y 30 kHz — un **coro de
+esperanzas (katydids)**. La ecolocación genuina se ve en la misma grabación como
+barridos verticales breves por encima de 40 kHz, pero no es lo que concentra la
+energía de la banda.
+
+El problema era la regla, y era el mismo error que el de la geofonía en sentido
+inverso: asignaba `bat_echolocation` a *cualquier* evento cuya banda dominante
+fuera ultrasónica, incluida la rama que explícitamente devolvía "actividad
+ultrasónica sostenida - una jornada de forrajeo". En un bosque neotropical la
+banda de 16-40 kHz está ocupada de forma continua por insectos estriduladores,
+mucho más fuertes en conjunto que cualquier murciélago. El propio comentario de la
+tabla de bandas decía que ahí viven las esperanzas; la regla lo ignoró.
+
+**La corrección, a partir de las imágenes y no de una suposición.** La duración
+los separa: un paso dura de uno a tres segundos, un coro dura minutos. La energía
+ultrasónica sostenida (>10 s) ahora se clasifica como `insect_chorus`; los eventos
+breves siguen siendo `bat_echolocation` pero con confianza 0.5 y un razonamiento
+que advierte que la misma banda lleva esperanzas y que hay que verificar. En el
+archivo del búho esto movió cinco eventos de murciélago a insecto y dejó intactos
+los genuinamente breves.
+
+**Sigue abierto.** Distinguir una esperanza de un murciélago *dentro* de un evento
+ultrasónico breve requiere el trabajo de estructura de pulsos, hoy bloqueado por
+la resolución de modulación. Hasta entonces, trate `bat_echolocation` como una
+lista de candidatos por revisar, no como un conteo.
+
+**Un límite práctico encontrado al mismo tiempo.** Los dos archivos de 60 minutos
+a 192 kHz no pueden procesarse tal cual: a la frecuencia nativa con un salto de
+256 muestras requieren unos 11 GB para el arreglo de magnitud más 5.5 GB para el
+audio, frente a 17 GB de RAM. El análisis mantiene hoy todo el espectrograma en
+memoria. Las grabaciones ultrasónicas largas necesitan procesamiento por bloques o
+análisis por tramos.
+
+---
+
 ## Asunto 1 — La frecuencia de muestreo debe decidirse antes del despliegue
 
 **La decisión.** A qué frecuencia de muestreo desplegar los AudioMoth, por sitio y por temporada.
