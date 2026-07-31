@@ -128,6 +128,14 @@ def _add_detect_parser(sub) -> None:
                    help="Skip the concatenated one-video-per-event-type reels")
     m.add_argument("--no-style-by-domain", action="store_true",
                    help="Use one colormap for every event type")
+    m.add_argument("--no-focus", action="store_true",
+                   help="Plot the full frequency range instead of bracketing "
+                        "the event's own band")
+    m.add_argument("--min-freq", type=int, default=200,
+                   help="Bottom of the spectrogram in Hz (default: 200 — below "
+                        "that a field recording carries rumble, not signal)")
+    m.add_argument("--no-metadata-column", action="store_true",
+                   help="Omit the metadata column padded onto the right")
     m.add_argument("--no-gallery", action="store_true",
                    help="Skip the HTML event gallery")
     m.add_argument("--json-only", action="store_true",
@@ -298,6 +306,9 @@ def config_from_detect_args(args: argparse.Namespace) -> Config:
         ),
         video=VideoConfig(
             max_freq=args.max_freq,
+            min_freq=args.min_freq,
+            focus_on_event=not args.no_focus,
+            metadata_column_px=0 if args.no_metadata_column else 360,
             style_by_domain=not args.no_style_by_domain,
         ),
         phenology=PhenologyConfig(write_csv=not args.no_csv),

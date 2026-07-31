@@ -170,7 +170,11 @@ candidate: insect chorus (40%)  ultrasonic mid  27.7 kHz  5.8s  13 Hz pulse  NDS
 probable: dawn chorus participant (80%)   biophony mid  5.4 kHz  5.0s  NDSI +1.00  ACI 446
 ```
 
-**Derecha — medido.** Banda dominante, centroide espectral, duración, tasa de pulso cuando la envolvente es lo bastante periódica para significar algo, y los índices. Todo aritmética sobre la señal.
+**Derecha — medido.** Una columna de metadatos añadida al cuadro lleva todo lo que se sabe del clip, en cuatro grupos: **SITE** (estación, vereda, latitud, longitud, elevación, cobertura, código CORINE, época), **RECORDER** (dispositivo, fecha, hora, temperatura, frecuencia de muestreo, batería), **EVENT** (inicio, duración, banda, centroide, centroide en banda, cresta, entropía, tasa de pulso) e **INDICES** (ACI, BIO, NDSI, ADI, AEI). Todo medido o levantado en campo.
+
+Las coordenadas provienen de la capa SIG del muestreo, no del grabador: `sites.py` lee un KML de puntos y empareja cada grabación con su estación por cobertura y fecha. Sin esa capa, esas líneas simplemente no aparecen.
+
+El gráfico arranca en **200 Hz** y no en 0: por debajo de eso una grabación de campo lleva retumbe, viento sobre la carcasa y deriva de DC, y en un eje logarítmico ese rango muerto se comía un tercio de la altura. Además se encuadra alrededor de la banda propia del evento (tres octavas abajo, dos arriba). `--no-focus` restaura el rango completo; `--min-freq` mueve el piso.
 
 **Izquierda — inferido**, etiquetado según hasta dónde llega la afirmación:
 

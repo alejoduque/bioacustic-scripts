@@ -27,13 +27,19 @@ _FFMPEG_CANDIDATES = (
     "/usr/local/opt/ffmpeg-full/bin/ffmpeg",
 )
 
-# macOS / Linux fonts that ffmpeg's drawtext can load without fontconfig
+# Monospaced faces, preferred so every glyph on the frame belongs to one
+# family. showspectrum draws its own axis labels with a fixed bitmap font
+# compiled into libavfilter, which is not exposed as a file and so cannot be
+# loaded here; a monospace face is the closest available match and keeps the
+# overlays from reading as a different typographic voice.
 _FONT_CANDIDATES = (
+    "/System/Library/Fonts/Menlo.ttc",
+    "/System/Library/Fonts/Monaco.ttf",
+    "/System/Library/Fonts/Supplemental/Andale Mono.ttf",
+    "/System/Library/Fonts/Supplemental/Courier New.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "/System/Library/Fonts/SFNS.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/TTF/DejaVuSans.ttf",
 )
 
 
@@ -204,6 +210,7 @@ class TextOverlay:
     color: str = "white"
     border_width: int = 1
     border_color: str = "black"
+    line_spacing: int = 6
 
 
 class OverlayTexts:
@@ -239,6 +246,7 @@ class OverlayTexts:
             "box=0",
             f"borderw={overlay.border_width}",
             f"bordercolor={overlay.border_color}",
+            f"line_spacing={overlay.line_spacing}",
         ]
         if self.font_file:
             parts.insert(1, f"fontfile={self.font_file}")

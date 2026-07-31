@@ -46,6 +46,8 @@ from .osc_output import (generate_phenology_supercollider_score,
 from .phenology import (build_phenological_calendar, generate_phenology_html,
                         write_phenology_csv)
 from .report import generate_event_report, generate_summary_report
+from .sites import (find_station_table, load_stations, match_station,
+                    station_fields)
 from .clipper import apply_fixed_windows
 from .spectral import analyze, event_band_features, stream_features
 from .video import build_event_type_reels, render_all_clips
@@ -92,7 +94,8 @@ def find_wav_files(paths: str | list[str]) -> list[str]:
 # --- single recording -------------------------------------------------------
 
 def classify_all(events: list[Event], spectral_result: dict,
-                 recording_meta: dict, config: Config
+                 recording_meta: dict, config: Config,
+                 site_fields: dict | None = None
                  ) -> tuple[list[tuple[Event, dict]], list[Classification]]:
     """
     Classify every detected event.
@@ -106,6 +109,7 @@ def classify_all(events: list[Event], spectral_result: dict,
     # Anything needing FFT bins — acoustic indices, within-band features — is
     # computed later per clip, where the window is a minute rather than an hour.
     n_frames = len(spectral_result["flux"])
+    site_fields = site_fields or {}
 
     pairs: list[tuple[Event, dict]] = []
     classifications: list[Classification] = []
@@ -139,6 +143,7 @@ def classify_all(events: list[Event], spectral_result: dict,
         prev_flux = event.peak_flux
 
         pairs.append((event, {
+            **site_fields,
             "event_index": i + 1,
             "onset_s": round(event.onset_s, 3),
             "offset_s": round(event.offset_s, 3),
@@ -155,6 +160,10 @@ def classify_all(events: list[Event], spectral_result: dict,
             "confidence": round(classification.confidence, 3),
             "certainty": classification.certainty,
             "dominant_band": classification.dominant_band,
+            "band_lo_hz": config.spectral.bands.get(
+                classification.dominant_band, (0, 0))[0],
+            "band_hi_hz": config.spectral.bands.get(
+                classification.dominant_band, (0, 0))[1],
             "reasoning": classification.reasoning,
         }))
 
@@ -274,6 +283,21 @@ def process_single_file(wav_path: str, config: Config) -> dict:
     recording_meta["duration_s"] = duration_s
     recording_meta["samplerate_hz"] = sr
 
+    # Where the recorder was. The WAV header knows when and how warm, never
+    # where; that comes from the survey's GIS layer if one sits near the audio.
+    site = {}
+    kml = find_station_table(wav_path)
+    if kml:
+        station = match_station(load_stations(kml),
+                                recording_meta.get("habitat", ""),
+                                recording_meta.get("datetime"))
+        site = station_fields(station)
+        if site:
+            print(f"  Station {site['station_id']} — {site['locality']}  "
+                  f"{site['latitude']:.5f}, {site['longitude']:.5f}"
+                  f"  {site['elevation_m']:.0f} m")
+    recording_meta.update(site)
+
     # PASS 1 — scan the whole recording for changes, streaming.
     # Only the per-frame series are kept; the magnitude spectrogram never exists
     # in full. An hour at 192 kHz would need ~11 GB as one array and ~170 MB as
@@ -292,7 +316,7 @@ def process_single_file(wav_path: str, config: Config) -> dict:
 
     print("  Classifying events...")
     pairs, classifications = classify_all(events, spectral_result,
-                                          recording_meta, config)
+                                          recording_meta, config, site)
     events_data = [data for _, data in pairs]
 
     # The parliament census covers every detected event, whether or not the

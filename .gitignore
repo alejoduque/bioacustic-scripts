@@ -35,3 +35,6 @@ detected_events/
 *.swp
 .vscode/
 .idea/
+
+# Local test renders (audio/video, not source)
+test_output/

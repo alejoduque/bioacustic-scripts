@@ -170,7 +170,11 @@ candidate: insect chorus (40%)  ultrasonic mid  27.7 kHz  5.8s  13 Hz pulse  NDS
 probable: dawn chorus participant (80%)   biophony mid  5.4 kHz  5.0s  NDSI +1.00  ACI 446
 ```
 
-**Right — measured.** Dominant band, spectral centroid, duration, pulse rate when the envelope is periodic enough for it to mean anything, and the indices. All arithmetic on the signal.
+**Right — measured.** A metadata column padded onto the frame carries everything known about the clip, in four groups: **SITE** (station id, locality, latitude, longitude, elevation, land cover, CORINE code, season), **RECORDER** (device id, date, time, temperature, sample rate, battery), **EVENT** (onset, length, band, centroid, in-band centroid, crest, entropy, pulse rate) and **INDICES** (ACI, BIO, NDSI, ADI, AEI). All of it measured or surveyed.
+
+Coordinates come from the survey's GIS layer, not the recorder: `sites.py` reads a KML of sampling points and matches each recording to its station by land cover and date. Without such a layer those lines are simply absent.
+
+The plot itself starts at **200 Hz** rather than 0 — below that a field recording carries rumble, wind on the case and DC drift, and on a log axis that dead range ate a third of the height. It is also bracketed around the event's own band (three octaves down, two up), so the picture concentrates on what was detected. `--no-focus` restores the full range, `--min-freq` moves the floor.
 
 **Left — inferred**, tagged with how far the claim goes:
 

@@ -133,7 +133,25 @@ class VideoConfig:
     height: int = 592
     dynamic_range: int = 72
     max_freq: int = 10000
-    min_freq: int = 0
+    # Below roughly 200 Hz a field spectrogram carries rumble, wind on the
+    # case and DC drift, not signal — and on a log axis that dead range eats
+    # a third of the plot height. Raised off zero so the space goes to the
+    # frequencies the event actually occupies.
+    min_freq: int = 200
+
+    # Bracket the plot around the event's own band rather than showing the
+    # whole spectrum. Generous margins (two octaves either side) keep enough
+    # context to see what else was happening.
+    focus_on_event: bool = True
+    # Asymmetric on purpose. Widening upward mostly adds noise floor, while
+    # widening downward keeps anuran and low-passerine activity in view — the
+    # content most easily lost when a louder high band sets the focus.
+    focus_margin_octaves_up: float = 2.0
+    focus_margin_octaves_down: float = 3.0
+
+    # Width in pixels of the metadata column padded onto the right of the
+    # frame. 0 removes the column.
+    metadata_column_px: int = 360
     freq_scale: str = "lin"
     gain_scale: str = "log"
     color: str = "cool"          # fallback when style_by_domain is False
@@ -155,6 +173,8 @@ class VideoConfig:
     header_font_size: int = 24
     date_font_size: int = 20
     label_font_size: int = 20
+    column_font_size: int = 13
+    column_line_spacing: int = 3
 
     # Static poster / thumbnail (replaces make-spectrogram-thumbnail-fixed.sh)
     poster_width: int = 1280

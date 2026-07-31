@@ -91,13 +91,22 @@ def _sites_html(results: list[dict], base: Path) -> str:
         filename = result.get("filename", "")
         stem = Path(filename).stem
         rec_dt = result.get("datetime")
+        # Coordinates from the survey's GIS layer, if the events carry them.
+        # These prefill the inputs; anything already saved by hand in the
+        # browser still wins, since that is the user's own correction.
+        first = (result.get("events") or [{}])[0]
+        lat, lon = first.get("latitude"), first.get("longitude")
+        station = first.get("station_id", "")
+        gis = (f' data-lat="{lat}" data-lon="{lon}"'
+               if lat is not None and lon is not None else "")
         rows.append(f"""<tr data-file="{html.escape(stem)}">
-  <td class="mono">{html.escape(filename)}</td>
+  <td class="mono">{html.escape(filename)}<br>
+      <span class="station">{html.escape(station or '')}</span></td>
   <td>{html.escape(str(result.get('habitat', '') or '—'))}</td>
   <td>{html.escape(rec_dt.strftime('%Y-%m-%d %H:%M') if rec_dt else '—')}</td>
   <td>{result.get('n_events', 0)}</td>
   <td>{result.get('n_clips', 0)}</td>
-  <td class="gps">
+  <td class="gps"{gis}>
     <input class="gps-lat" data-file="{html.escape(stem)}" placeholder="lat"
            inputmode="decimal">
     <input class="gps-lng" data-file="{html.escape(stem)}" placeholder="lng"
@@ -382,6 +391,7 @@ _TEMPLATE = """<!DOCTYPE html>
   .mini.map {{ background: #3498db; }}
   .mini.clear {{ background: #e74c3c; }}
   .gps-out {{ margin-left: 8px; font-size: 11px; color: #7f8c8d; }}
+  .station {{ font-size: 11px; color: #7f8c8d; }}
   footer {{ text-align: center; color: #fff; font-size: 13px; margin: 28px 0 8px; }}
   /* lightbox */
   #lb {{
@@ -545,6 +555,12 @@ document.querySelectorAll('.mini').forEach(button => {{
   }});
 }});
 
+// Prefill from the survey layer, then let anything saved by hand override it.
+document.querySelectorAll('td.gps[data-lat]').forEach(cell => {{
+  const lat = cell.querySelector('.gps-lat'), lng = cell.querySelector('.gps-lng');
+  if (lat && !lat.value) lat.value = cell.dataset.lat;
+  if (lng && !lng.value) lng.value = cell.dataset.lon;
+}});
 Object.keys(gps).forEach(file => {{
   const [lat, lng] = inputsFor(file);
   if (lat && lng) {{ lat.value = gps[file].lat; lng.value = gps[file].lng; }}

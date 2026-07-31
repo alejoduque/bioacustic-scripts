@@ -40,14 +40,42 @@ class ClipRender:
         }
 
 
-def _spectrum_filter(config: VideoConfig, color: str) -> str:
+def freq_window(event: dict, config: VideoConfig) -> tuple[int, int]:
+    """
+    Frequency range to plot for one event.
+
+    Without focus this is simply [min_freq, max_freq]. With it, the plot is
+    bracketed around the band the event actually occupies, widened by
+    `focus_margin_octaves` on each side so neighbouring activity stays visible.
+    The floor never drops below min_freq: on a log axis the sub-200 Hz rumble
+    would otherwise take a third of the height and show nothing.
+    """
+    lo, hi = config.min_freq, config.max_freq
+    if not config.focus_on_event:
+        return lo, hi
+
+    band_lo = event.get("band_lo_hz")
+    band_hi = event.get("band_hi_hz")
+    if not band_hi:
+        return lo, hi
+
+    focus_lo = max(lo, int((band_lo or 0) / 2.0 ** config.focus_margin_octaves_down))
+    focus_hi = min(hi, int(band_hi * 2.0 ** config.focus_margin_octaves_up))
+    if focus_hi <= focus_lo:
+        return lo, hi
+    return focus_lo, focus_hi
+
+
+def _spectrum_filter(config: VideoConfig, color: str,
+                     window: tuple[int, int] | None = None) -> str:
     """The showspectrum source filter, shared by clip and whole-file renders."""
+    start, stop = window or (config.min_freq, config.max_freq)
     return (
         f"[0:a]showspectrum="
         f"s={config.width}x{config.height}:"
         f"legend={config.legend}:"
-        f"start={config.min_freq}:"
-        f"stop={config.max_freq}:"
+        f"start={start}:"
+        f"stop={stop}:"
         f"fscale={config.freq_scale}:"
         f"color={color}:"
         f"drange={config.dynamic_range}:"
@@ -72,7 +100,9 @@ def _encode_args(config: VideoConfig, output_path: str) -> list[str]:
 def _render_spectrogram_video(wav_path: str, output_path: str,
                               overlays: list[TextOverlay],
                               color: str,
-                              config: VideoConfig) -> tuple[bool, str]:
+                              config: VideoConfig,
+                              window: tuple[int, int] | None = None,
+                              column_px: int = 0) -> tuple[bool, str]:
     """
     Render a scrolling spectrogram video with the given text overlays.
 
@@ -85,7 +115,15 @@ def _render_spectrogram_video(wav_path: str, output_path: str,
     draw_text = config.overlay_text and can_draw_text()
 
     with OverlayTexts(config.font_file) as texts:
-        chain = _spectrum_filter(config, color)
+        chain = _spectrum_filter(config, color, window)
+        # showspectrum stamps "CREATED BY LIBAVFILTER" into the bottom-left of
+        # its legend. Painting over that strip is the only way to remove it
+        # short of disabling the legend and redrawing the axes by hand; the
+        # sample-rate note on the opposite side is left alone because it is
+        # real information about the recording.
+        chain += ",drawbox=x=0:y=ih-22:w=430:h=22:color=black:t=fill"
+        if column_px > 0:
+            chain += f",pad=iw+{column_px}:ih:0:0:color=black"
         if draw_text:
             for overlay in overlays:
                 if overlay.text:
@@ -94,6 +132,80 @@ def _render_spectrogram_video(wav_path: str, output_path: str,
 
         return run_ffmpeg(["-i", wav_path, "-filter_complex", chain,
                            *_encode_args(config, output_path)])
+
+
+def metadata_block(event: dict, recording_meta: dict) -> str:
+    """
+    The metadata column, as one multi-line string.
+
+    Everything known about the clip, grouped so a reader can see at a glance
+    which lines are survey facts, which are recorder facts, and which are
+    derived. Drawn as a single drawtext with newlines rather than one filter
+    per line: a twenty-line column would otherwise mean twenty filters.
+
+    Empty values are dropped, so a deployment with no GIS layer simply shows a
+    shorter column instead of a list of blanks.
+    """
+    dt = recording_meta.get("datetime")
+    sr = recording_meta.get("samplerate_hz") or 0
+    temp = recording_meta.get("temperature_c")
+    lat, lon = event.get("latitude"), event.get("longitude")
+
+    groups = [
+        ("SITE", [
+            ("station", event.get("station_id")),
+            ("locality", event.get("locality")),
+            ("lat", f"{lat:.5f}" if lat is not None else ""),
+            ("lon", f"{lon:.5f}" if lon is not None else ""),
+            ("elevation", f"{event['elevation_m']:.0f} m"
+             if event.get("elevation_m") is not None else ""),
+            ("cover", recording_meta.get("habitat")),
+            ("CORINE", event.get("corine_code")),
+            ("season", recording_meta.get("season")),
+        ]),
+        ("RECORDER", [
+            ("device", recording_meta.get("audiomoth_id")),
+            ("date", dt.strftime("%Y-%m-%d") if dt else ""),
+            ("time", dt.strftime("%H:%M:%S") if dt else ""),
+            ("temp", f"{temp:.1f} C" if temp is not None else ""),
+            ("rate", f"{sr / 1000:.0f} kHz" if sr else ""),
+            ("battery", f"{recording_meta['battery_v']:.2f} V"
+             if recording_meta.get("battery_v") is not None else ""),
+        ]),
+        ("EVENT", [
+            ("onset", f"{event.get('onset_s', 0):.2f} s"),
+            ("length", f"{event.get('duration_s', 0):.2f} s"),
+            ("band", str(event.get("dominant_band", "")).replace("_", " ")),
+            ("centroid", f"{event.get('centroid', 0) / 1000:.2f} kHz"),
+            ("in-band", f"{event.get('band_centroid', 0) / 1000:.2f} kHz"
+             if event.get("band_centroid") else ""),
+            ("crest", f"{event.get('band_crest', 0):.1f}"
+             if event.get("band_crest") else ""),
+            ("entropy", f"{event.get('band_entropy', 0):.3f}"
+             if event.get("band_entropy") else ""),
+            ("pulse", f"{event['pulse_rate_hz']:.1f} Hz"
+             if event.get("periodicity", 0) >= 0.2
+             and event.get("pulse_rate_hz") else ""),
+        ]),
+        ("INDICES", [
+            ("ACI", f"{event.get('aci', 0):.1f}"),
+            ("BIO", f"{event.get('bio', 0):.1f}"),
+            ("NDSI", f"{event.get('ndsi', 0):+.3f}"),
+            ("ADI", f"{event.get('adi', 0):.3f}"),
+            ("AEI", f"{event.get('aei', 0):.3f}"),
+        ]),
+    ]
+
+    lines = []
+    for heading, rows in groups:
+        present = [(k, str(v)) for k, v in rows if v not in (None, "", "None")]
+        if not present:
+            continue
+        if lines:
+            lines.append("")
+        lines.append(heading)
+        lines += [f"{k:<10}{v}" for k, v in present]
+    return "\n".join(lines)
 
 
 def render_clip_video(clip_path: str, output_path: str, event: dict,
@@ -111,38 +223,29 @@ def render_clip_video(clip_path: str, output_path: str, event: dict,
     domain = event.get("domain", "")
     role = event.get("role", "event").replace("_", " ")
     confidence = event.get("confidence", 0.0)
-    band = event.get("dominant_band", "").replace("_", " ")
     certainty = event.get("certainty") or certainty_of(confidence)
 
-    # The caption carries two different kinds of claim and must not blur them.
-    # The lower line is MEASURED: which band held the energy, where its centre
-    # sat, how long it ran, and — when the envelope is periodic enough to mean
-    # anything — the pulse rate. All of it comes from arithmetic on the signal.
-    duration = event.get("duration_s") or (event.get("offset_s", 0) - event.get("onset_s", 0))
-    measured = f"{band}  {event.get('centroid', 0) / 1000:.1f} kHz  {duration:.1f}s"
-    if event.get("periodicity", 0) >= 0.2 and event.get("pulse_rate_hz", 0) > 0:
-        measured += f"  {event['pulse_rate_hz']:.0f} Hz pulse"
-    measured += (f"   NDSI {event.get('ndsi', 0):+.2f}"
-                 f"  ACI {event.get('aci', 0):.0f}")
-
-    # The upper line is INFERRED: a rule fired. Validation showed those rules
-    # are uncalibrated, so the line states how far the claim goes rather than
-    # asserting a species-like fact. "unclassified" is printed as such instead
-    # of dressing the fallback branch up as a finding.
-    if certainty == "unclassified":
-        inferred = "unclassified"
-    elif certainty == "candidate":
-        inferred = f"candidate: {role} ({confidence:.0%})"
-    else:
-        inferred = f"probable: {role} ({confidence:.0%})"
+    # The caption NAMES THE EVENT and then says how far that naming can be
+    # trusted. An earlier version printed only "unclassified", which told a
+    # viewer nothing about what they were looking at; the qualifier stays
+    # because the rules are uncalibrated. Everything measured now lives in the
+    # metadata column, so the old bottom-right line was both a duplicate and a
+    # collision with showspectrum's own TIME axis label.
+    qualifier = {"probable": "probable",
+                 "candidate": "candidate",
+                 "unclassified": "unverified"}.get(certainty, certainty)
+    inferred = f"{role}  [{qualifier} {confidence:.0%}]"
 
     rec_dt = recording_meta.get("datetime")
     date_text = rec_dt.strftime("%d %B %Y %H:%M") if rec_dt else ""
     onset = event.get("onset_s", 0.0)
-    if date_text:
-        date_text = f"{date_text}  (+{onset:.0f}s)"
-    else:
-        date_text = f"+{onset:.0f}s into recording"
+    date_text = (f"{date_text}  (+{onset:.0f}s)" if date_text
+                 else f"+{onset:.0f}s into recording")
+
+    column_px = config.metadata_column_px
+    # Anchor the spectrum-side overlays to the plot, not to the padded frame,
+    # or the right-aligned date would land inside the metadata column.
+    plot_right = f"(W-{column_px})" if column_px > 0 else "W"
 
     overlays = [
         TextOverlay(
@@ -151,24 +254,26 @@ def render_clip_video(clip_path: str, output_path: str, event: dict,
         ),
         TextOverlay(
             text=date_text,
-            x="W-tw-25", y="25", font_size=config.date_font_size,
+            x=f"{plot_right}-tw-25", y="25", font_size=config.date_font_size,
         ),
-        # One caption row, split by kind of claim rather than stacked: there is
-        # only one text-height of clear space below the plot, and a second line
-        # runs into the frequency axis labels. Inferred on the left, measured on
-        # the right, so the two are never read as one statement.
         TextOverlay(
             text=inferred,
             x="25", y="H-th-25", font_size=config.label_font_size,
         ),
-        TextOverlay(
-            text=measured,
-            x="W-tw-25", y="H-th-25", font_size=config.label_font_size - 4,
-        ),
     ]
 
+    if column_px > 0:
+        overlays.append(TextOverlay(
+            text=metadata_block(event, recording_meta),
+            x=f"W-{column_px}+18", y="24",
+            font_size=config.column_font_size,
+            line_spacing=config.column_line_spacing,
+        ))
+
     return _render_spectrogram_video(clip_path, output_path, overlays,
-                                     config.color_for(domain), config)
+                                     config.color_for(domain), config,
+                                     window=freq_window(event, config),
+                                     column_px=column_px)
 
 
 def render_clip_poster(clip_path: str, poster_path: str,
