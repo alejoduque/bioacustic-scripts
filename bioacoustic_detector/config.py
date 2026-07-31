@@ -176,14 +176,19 @@ class VideoConfig:
     # Text overlays
     overlay_text: bool = True
     font_file: str = ""          # auto-detected when empty
-    # Kept close together on purpose. At 24px against a 13px column the same
-    # face reads as a different, brighter one: a 1-pixel outline is
-    # proportionally much thinner on large glyphs, so the stroke looks bolder.
-    header_font_size: int = 16
-    date_font_size: int = 15
-    label_font_size: int = 16
-    column_font_size: int = 13
-    column_line_spacing: int = 3
+    # Header/date/caption share one size on purpose: any gap between them and
+    # the column reads as a second typeface, because a fixed 1-pixel outline
+    # is proportionally thicker on smaller glyphs — the same face at two
+    # sizes looks like two different weights. The column stays smaller since
+    # it is dense reference text, not a label meant to be read at a glance.
+    header_font_size: int = 13
+    date_font_size: int = 13
+    label_font_size: int = 13
+    # 10px and below made the whole column vanish — some drawtext/freetype
+    # combination on Monaco.ttf breaks at that size instead of degrading
+    # gracefully. 11 is the smallest that reliably renders.
+    column_font_size: int = 11
+    column_line_spacing: int = 2
 
     # Static poster / thumbnail (replaces make-spectrogram-thumbnail-fixed.sh)
     poster_width: int = 1280

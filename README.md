@@ -178,6 +178,8 @@ El gráfico arranca en **200 Hz** y no en 0: por debajo de eso una grabación de
 
 El color de la biofonía cambió de `green` a `plasma` (púrpura → naranja → amarillo): un mapa monocromático como `green` casi no tiene contraste perceptual en la mitad baja de energía, así que esa parte del cuadro se veía plana, como fuera de foco. Con `plasma` un cambio de energía se ve como un cambio de matiz mucho antes de que el píxel llegue a negro total. Se controla por dominio en `VideoConfig.domain_colors` (colormaps de `showspectrum` de ffmpeg).
 
+Encabezado, fecha y subtítulo ahora comparten un solo tamaño (13px) en vez de tres parecidos (16/15/16): cualquier diferencia entre ellos y la columna se leía como una segunda tipografía, porque un contorno fijo de 1 píxel es proporcionalmente más grueso en glifos pequeños — la misma fuente en dos tamaños se ve como dos pesos distintos. La columna de metadatos bajó de 13px a 11px, ya que es texto de referencia denso, no una etiqueta pensada para leerse de un vistazo. (10px y menos hacían desaparecer la columna entera — alguna combinación de drawtext/freetype con Monaco.ttf falla por completo en ese tamaño en vez de degradarse; 11px es el mínimo que renderiza de forma confiable.)
+
 **Izquierda — inferido.** Cada voz que lleva el evento, unidas con `+`, y luego hasta dónde llega la afirmación:
 
 ```

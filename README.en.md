@@ -178,6 +178,8 @@ The plot itself starts at **200 Hz** rather than 0 — below that a field record
 
 The biophony colormap changed from `green` to `plasma` (purple → orange → yellow): a single-hue map like `green` has almost no perceptual contrast in the low-energy half of the frame, which read as an out-of-focus blur there. With `plasma` an energy change shows up as a hue shift well before a pixel goes fully dark. Controlled per domain in `VideoConfig.domain_colors` (ffmpeg's `showspectrum` colormaps).
 
+Header, date and caption now share one size (13px) instead of three similar ones (16/15/16): any gap between them and the column read as a second typeface, because a fixed 1-pixel outline is proportionally thicker on smaller glyphs — the same face at two sizes looks like two different weights. The metadata column dropped from 13px to 11px, since it's dense reference text rather than a label meant to be read at a glance. (10px and below made the whole column vanish — some drawtext/freetype combination on Monaco.ttf breaks outright at that size instead of degrading gracefully; 11px is the smallest that reliably renders.)
+
 **Left — inferred.** Every voice the event carries, joined with `+`, then how far the claim goes:
 
 ```
