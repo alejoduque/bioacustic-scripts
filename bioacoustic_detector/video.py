@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import ClipConfig, VideoConfig
+from .classifier import certainty_of
 from .media import (OverlayTexts, TextOverlay, can_draw_text, concat_videos,
                     find_font, have_ffmpeg, run_ffmpeg, video_to_gif)
 
@@ -108,9 +109,32 @@ def render_clip_video(clip_path: str, output_path: str, event: dict,
     config = config or VideoConfig()
 
     domain = event.get("domain", "")
-    role = event.get("role", "event").replace("_", " ").title()
+    role = event.get("role", "event").replace("_", " ")
     confidence = event.get("confidence", 0.0)
     band = event.get("dominant_band", "").replace("_", " ")
+    certainty = event.get("certainty") or certainty_of(confidence)
+
+    # The caption carries two different kinds of claim and must not blur them.
+    # The lower line is MEASURED: which band held the energy, where its centre
+    # sat, how long it ran, and — when the envelope is periodic enough to mean
+    # anything — the pulse rate. All of it comes from arithmetic on the signal.
+    duration = event.get("duration_s") or (event.get("offset_s", 0) - event.get("onset_s", 0))
+    measured = f"{band}  {event.get('centroid', 0) / 1000:.1f} kHz  {duration:.1f}s"
+    if event.get("periodicity", 0) >= 0.2 and event.get("pulse_rate_hz", 0) > 0:
+        measured += f"  {event['pulse_rate_hz']:.0f} Hz pulse"
+    measured += (f"   NDSI {event.get('ndsi', 0):+.2f}"
+                 f"  ACI {event.get('aci', 0):.0f}")
+
+    # The upper line is INFERRED: a rule fired. Validation showed those rules
+    # are uncalibrated, so the line states how far the claim goes rather than
+    # asserting a species-like fact. "unclassified" is printed as such instead
+    # of dressing the fallback branch up as a finding.
+    if certainty == "unclassified":
+        inferred = "unclassified"
+    elif certainty == "candidate":
+        inferred = f"candidate: {role} ({confidence:.0%})"
+    else:
+        inferred = f"probable: {role} ({confidence:.0%})"
 
     rec_dt = recording_meta.get("datetime")
     date_text = rec_dt.strftime("%d %B %Y %H:%M") if rec_dt else ""
@@ -129,12 +153,16 @@ def render_clip_video(clip_path: str, output_path: str, event: dict,
             text=date_text,
             x="W-tw-25", y="25", font_size=config.date_font_size,
         ),
+        # One caption row, split by kind of claim rather than stacked: there is
+        # only one text-height of clear space below the plot, and a second line
+        # runs into the frequency axis labels. Inferred on the left, measured on
+        # the right, so the two are never read as one statement.
         TextOverlay(
-            text=f"{role} ({confidence:.0%}) | {band}",
+            text=inferred,
             x="25", y="H-th-25", font_size=config.label_font_size,
         ),
         TextOverlay(
-            text=f"NDSI {event.get('ndsi', 0):+.2f}  ACI {event.get('aci', 0):.1f}",
+            text=measured,
             x="W-tw-25", y="H-th-25", font_size=config.label_font_size - 4,
         ),
     ]

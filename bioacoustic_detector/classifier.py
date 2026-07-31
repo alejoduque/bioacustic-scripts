@@ -120,14 +120,47 @@ def is_high_band(band: str) -> bool:
     return band == "biophony_high" or is_ultrasonic_band(band)
 
 
+# How far a role assignment can be trusted. Validation against AnuraSet and the
+# Manakai field recordings established that `role` is a hypothesis from
+# uncalibrated thresholds while `dominant_band` is a measurement, and that the
+# two must not be presented as though they were the same kind of claim.
+#
+# Derived from the confidence each rule branch returns, which is itself a
+# hand-assigned constant ranking rules by specificity — never a probability.
+CERTAINTY_PROBABLE = 0.6    # a specific rule matched on several features
+CERTAINTY_CANDIDATE = 0.35  # a rule matched, but one known to over-claim
+
+
+def certainty_of(confidence: float) -> str:
+    """
+    Bucket a rule's confidence into a claim strength a reader can act on.
+
+    unclassified  the fallback branches — no rule matched, the event is filed
+                  under its nearest neighbour and means nothing more than that
+    candidate     a rule matched but is known to over-claim (bat_echolocation
+                  on a band that also carries katydids, for instance)
+    probable      a specific rule matched on several features
+    """
+    if confidence >= CERTAINTY_PROBABLE:
+        return "probable"
+    if confidence > CERTAINTY_CANDIDATE:
+        return "candidate"
+    return "unclassified"
+
+
 @dataclass
 class Classification:
     """Result of classifying an acoustic event."""
     role: str
     domain: str
-    confidence: float      # 0-1
-    dominant_band: str     # Name of the dominant frequency band
+    confidence: float      # 0-1, a rule-specificity rank, NOT a probability
+    dominant_band: str     # Name of the dominant frequency band (measured)
     reasoning: str         # Human-readable explanation
+
+    @property
+    def certainty(self) -> str:
+        """How far this assignment can be trusted — see certainty_of()."""
+        return certainty_of(self.confidence)
 
 
 def classify_event(onset_s: float, offset_s: float,

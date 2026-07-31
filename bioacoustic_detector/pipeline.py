@@ -153,6 +153,7 @@ def classify_all(events: list[Event], spectral_result: dict,
             "role": classification.role,
             "domain": classification.domain,
             "confidence": round(classification.confidence, 3),
+            "certainty": classification.certainty,
             "dominant_band": classification.dominant_band,
             "reasoning": classification.reasoning,
         }))

@@ -160,6 +160,28 @@ Every rendered clip encodes four independent channels of information. Nothing is
 
 Text is white with a 1-pixel black outline and no filled box, so it stays legible over any colormap without hiding the spectrogram beneath it — and so that colour in the frame means exactly one thing: the acoustic domain.
 
+### The caption separates measurement from inference
+
+The bottom row carries two different kinds of claim, on opposite sides, so they are never read as one statement:
+
+```
+unclassified                    geophony  15.2 kHz  0.3s  NDSI -0.58  ACI 235
+candidate: insect chorus (40%)  ultrasonic mid  27.7 kHz  5.8s  13 Hz pulse  NDSI +0.78  ACI 327
+probable: dawn chorus participant (80%)   biophony mid  5.4 kHz  5.0s  NDSI +1.00  ACI 446
+```
+
+**Right — measured.** Dominant band, spectral centroid, duration, pulse rate when the envelope is periodic enough for it to mean anything, and the indices. All arithmetic on the signal.
+
+**Left — inferred**, tagged with how far the claim goes:
+
+| Tag | Means |
+|---|---|
+| `probable` | a specific rule matched on several features (confidence ≥ 0.6) |
+| `candidate` | a rule matched but is known to over-claim — `bat_echolocation` sits here, because the same band carries katydids |
+| `unclassified` | no rule matched; the event fell through to the fallback branch and the label means nothing more than that |
+
+This exists because validation established that `role` is a hypothesis from uncalibrated thresholds while `dominant_band` is a measurement. Printing `Community Shift (20%)` gave the fallback branch the appearance of a finding; it now prints `unclassified`. The tier travels with the event as a `certainty` field in `events.json` and as a badge on every gallery card.
+
 ### Why colour maps to domain
 
 A colormap is a categorical signal, and there is only one categorical decision worth spending it on. Frequency is already the vertical axis; amplitude is already brightness. What neither axis shows is **what kind of participant** made the sound — and that is the entire point of the classification.
@@ -674,6 +696,7 @@ The pipeline is a **weak-labelling and segmentation front end**, not a classifie
 | `domain` | a defensible 4-class weak label | ground truth where transitions dominate |
 | `role` | a **hypothesis** from hand-tuned thresholds | a training target without human verification |
 | `confidence` | a hand-assigned constant per rule branch | a calibrated probability |
+| `certainty` | a triage tier — which roles are worth a human's time | evidence in itself |
 
 That last row matters: `confidence` is not learned or estimated. Each rule returns a fixed number the author assigned to it (0.8 for a dawn chorus match, 0.3 for a fallback). It ranks rules by how specific they are — nothing more.
 

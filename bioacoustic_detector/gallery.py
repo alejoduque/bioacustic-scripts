@@ -52,6 +52,9 @@ def collect_gallery_items(results: list[dict], base_dir: str) -> list[dict]:
                 "role": event.get("role", "unclassified"),
                 "domain": event.get("domain", "unknown"),
                 "confidence": event.get("confidence", 0.0),
+                "certainty": event.get("certainty", ""),
+                "periodicity": event.get("periodicity", 0.0),
+                "pulse_rate_hz": event.get("pulse_rate_hz", 0.0),
                 "onset_s": event.get("onset_s", 0.0),
                 "duration_s": event.get("duration_s", 0.0),
                 "band": event.get("dominant_band", ""),
@@ -208,7 +211,15 @@ def _group_html(role: str, items: list[dict], reel_link: str) -> str:
 def _card_html(item: dict) -> str:
     color = DOMAIN_COLORS.get(item["domain"], "#95a5a6")
     title = html.escape(item["role"].replace("_", " ").title())
-    meta_line = f'{item["onset_s"]:.0f}s · {item["duration_s"]:.1f}s · {item["confidence"]:.0%}'
+    # The role is inferred and uncalibrated; the band, centroid and duration are
+    # measured. The card marks which is which so a reader cannot mistake the
+    # fallback branch for a determination.
+    certainty = item.get("certainty") or "candidate"
+    claim = {"probable": "probable", "candidate": "candidate",
+             "unclassified": "unclassified"}.get(certainty, certainty)
+    meta_line = f'{item["onset_s"]:.0f}s · {item["duration_s"]:.1f}s'
+    if item.get("periodicity", 0) >= 0.2 and item.get("pulse_rate_hz", 0) > 0:
+        meta_line += f' · {item["pulse_rate_hz"]:.0f} Hz pulse'
 
     if item["poster"]:
         cover = f'<img loading="lazy" src="{item["poster"]}" alt="{title} spectrogram">'
@@ -239,7 +250,8 @@ def _card_html(item: dict) -> str:
     {'<span class="play">▶</span>' if item['video'] else ''}
   </div>
   <div class="body">
-    <div class="title">{title}</div>
+    <div class="title">{title}
+      <span class="claim {certainty}">{claim}</span></div>
     <div class="sub">{html.escape(item['source'])}</div>
     <div class="meta">{meta_line}</div>
     <dl>
@@ -322,6 +334,19 @@ _TEMPLATE = """<!DOCTYPE html>
   }}
   .body {{ padding: 12px 14px 14px; }}
   .title {{ font-weight: 600; }}
+  .claim {{
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; padding: 2px 6px; border-radius: 4px;
+    margin-left: 6px; vertical-align: middle;
+  }}
+  .claim.probable {{ background: #e8f5e9; color: #1b5e20; }}
+  .claim.candidate {{ background: #fff8e1; color: #8d6e00; }}
+  .claim.unclassified {{ background: #eceff1; color: #546e7a; }}
+  .legend-note {{
+    background: #fff; border-radius: 12px; padding: 12px 16px;
+    margin-bottom: 20px; font-size: 13px; color: #55606b;
+    box-shadow: 0 4px 6px rgba(0,0,0,.1);
+  }}
   .sub {{ font-family: ui-monospace, monospace; font-size: 12px;
          color: #7f8c8d; word-break: break-all; }}
   .meta {{ font-size: 12px; color: #55606b; margin: 6px 0 8px; }}
@@ -383,6 +408,17 @@ _TEMPLATE = """<!DOCTYPE html>
     <input type="search" id="q" placeholder="Filter by role, file, habitat, band…">
     {filter_chips}
     {pheno_html}
+  </div>
+
+  <div class="legend-note">
+    <b>Measured</b> — band, centroid, duration, pulse rate and the acoustic
+    indices are computed from the signal. <b>Inferred</b> — the role above each
+    card comes from hand-tuned rules that are not yet calibrated against
+    annotated recordings, so it is tagged
+    <span class="claim probable">probable</span>,
+    <span class="claim candidate">candidate</span> or
+    <span class="claim unclassified">unclassified</span>.
+    Treat the band as evidence and the role as a hypothesis.
   </div>
 
   {groups}

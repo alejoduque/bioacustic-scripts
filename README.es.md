@@ -160,6 +160,28 @@ Cada clip renderizado codifica cuatro canales de información independientes. Na
 
 El texto es blanco con un contorno negro de 1 píxel y sin caja de fondo, para que se lea sobre cualquier mapa de color sin tapar el espectrograma que hay debajo — y para que el color en el cuadro signifique exactamente una cosa: el dominio acústico.
 
+### La leyenda separa medición de inferencia
+
+La fila inferior lleva dos tipos distintos de afirmación, en lados opuestos, para que nunca se lean como una sola:
+
+```
+unclassified                    geophony  15.2 kHz  0.3s  NDSI -0.58  ACI 235
+candidate: insect chorus (40%)  ultrasonic mid  27.7 kHz  5.8s  13 Hz pulse  NDSI +0.78  ACI 327
+probable: dawn chorus participant (80%)   biophony mid  5.4 kHz  5.0s  NDSI +1.00  ACI 446
+```
+
+**Derecha — medido.** Banda dominante, centroide espectral, duración, tasa de pulso cuando la envolvente es lo bastante periódica para significar algo, y los índices. Todo aritmética sobre la señal.
+
+**Izquierda — inferido**, etiquetado según hasta dónde llega la afirmación:
+
+| Etiqueta | Significa |
+|---|---|
+| `probable` | una regla específica coincidió en varios rasgos (confianza ≥ 0.6) |
+| `candidate` | una regla coincidió, pero se sabe que sobre-afirma — `bat_echolocation` está aquí, porque la misma banda lleva esperanzas |
+| `unclassified` | ninguna regla coincidió; el evento cayó a la rama de respaldo y la etiqueta no significa más que eso |
+
+Esto existe porque la validación estableció que `role` es una hipótesis de umbrales sin calibrar mientras que `dominant_band` es una medición. Imprimir `Community Shift (20%)` le daba a la rama de respaldo apariencia de hallazgo; ahora imprime `unclassified`. El nivel viaja con el evento como campo `certainty` en `events.json` y como distintivo en cada tarjeta de la galería.
+
 ### Por qué el color corresponde al dominio
 
 Un mapa de color es una señal categórica, y solo hay una decisión categórica en la que valga la pena gastarlo. La frecuencia ya es el eje vertical; la amplitud ya es el brillo. Lo que ningún eje muestra es **qué tipo de participante** produjo el sonido, y eso es justamente el propósito de la clasificación.
@@ -677,6 +699,7 @@ El pipeline es un **front end de etiquetado débil y segmentación**, no un clas
 | `domain` | una etiqueta débil defendible de 4 clases | verdad de referencia donde dominan las transiciones |
 | `role` | una **hipótesis** de umbrales ajustados a mano | objetivo de entrenamiento sin verificación humana |
 | `confidence` | una constante asignada a mano por rama de regla | una probabilidad calibrada |
+| `certainty` | un nivel de triaje — qué roles merecen tiempo humano | evidencia en sí misma |
 
 Esa última fila importa: `confidence` no se aprende ni se estima. Cada regla devuelve un número fijo que el autor le asignó (0.8 para una coincidencia de coro del amanecer, 0.3 para un respaldo). Ordena las reglas según cuán específicas son, nada más.
 
