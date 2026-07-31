@@ -33,7 +33,8 @@ from .osc_output import (generate_phenology_supercollider_score,
 from .phenology import (build_phenological_calendar, generate_phenology_html,
                         write_phenology_csv)
 from .report import generate_event_report, generate_summary_report
-from .spectral import analyze
+from .spectral import (MIN_PERIODICITY_WINDOW_S, analyze,
+                       event_band_features)
 from .video import build_event_type_reels, render_all_clips
 
 def video_config_for(config: Config, sample_rate: int) -> VideoConfig:
@@ -115,6 +116,27 @@ def classify_all(events: list[Event], spectral_result: dict,
         event_indices = compute_all_indices(event_mag, spectral_result["freqs"],
                                             config.spectral)
 
+        # Within-band and temporal features, computed on the event's dominant
+        # band. The global centroid/flatness cannot tell a low-frequency chorus
+        # from low-frequency weather; these describe the band the event actually
+        # occupies, and how its energy is organised in time.
+        dominant = max(event_bands, key=event_bands.get) if event_bands else ""
+        band_feats = {}
+        if dominant and dominant in config.spectral.bands:
+            frame_rate = spectral_result["sr"] / spectral_result["hop_size"]
+            # Widen a short event to a context window for the temporal features
+            # only; call rate belongs to the sequence, not to one call.
+            need = int(MIN_PERIODICITY_WINDOW_S * frame_rate)
+            if (f_end - f_start) < need:
+                pad = (need - (f_end - f_start)) // 2
+                c0, c1 = max(0, f_start - pad), min(n_frames, f_end + pad)
+            else:
+                c0, c1 = f_start, f_end
+            band_feats = event_band_features(
+                event_mag, spectral_result["freqs"],
+                config.spectral.bands[dominant], frame_rate,
+                context_mag=magnitude[c0:c1])
+
         classification = classify_event(
             event.onset_s, event.offset_s,
             event_centroid, event_flatness, event.peak_flux,
@@ -143,6 +165,7 @@ def classify_all(events: list[Event], spectral_result: dict,
             "confidence": round(classification.confidence, 3),
             "dominant_band": classification.dominant_band,
             "reasoning": classification.reasoning,
+            **band_feats,
             **event_indices,
         }))
 

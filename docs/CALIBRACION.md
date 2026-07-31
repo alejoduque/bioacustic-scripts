@@ -82,6 +82,89 @@ Esto no podía haberse encontrado con audio sintético. Los "anfibios" sintétic
 
 ---
 
+## Intento de corrección y qué dejó establecido (2026-07-30)
+
+La respuesta obvia al hallazgo anterior es agregar rasgos que describan la banda
+propia del evento y su estructura temporal. Ambos están implementados y se
+registran en `events.json`:
+
+| Rasgo | Mide |
+|---|---|
+| `band_crest` | relación pico-media del espectro medio dentro de la banda dominante |
+| `band_entropy` | entropía normalizada entre los bins de esa banda — disperso vs concentrado |
+| `band_centroid` | dónde se ubica la energía dentro de su propia banda |
+| `periodicity` / `pulse_rate_hz` | modulación de amplitud medida **dentro del evento** |
+| `context_periodicity` / `context_rate_hz` | lo mismo sobre una ventana de ≥4 s **alrededor** del evento |
+
+**No están conectados a la clasificación, y no deberían estarlo hasta repetir la
+medición de abajo con los datos que faltan.** Registrarlos no cuesta nada y le da
+a la calibración futura rasgos reales que ajustar.
+
+### Medido sobre 60 grabaciones de AnuraSet
+
+186 detecciones que coinciden con una anotación experta de anuros, frente a 202
+detecciones de archivos de AnuraSet sin anotación alguna:
+
+| | anuros (n=186) | sin anotar (n=202) |
+|---|---|---|
+| `band_crest` mediana | 35.06 | 35.61 |
+| `band_entropy` mediana | 0.271 | 0.214 |
+| `periodicity` mediana | 0.000 | 0.112 |
+
+**Ninguna separación. En periodicidad el orden está invertido.** En todos los
+umbrales probados, la clase negativa se retuvo en igual o mayor proporción que la
+positiva.
+
+### Por qué esto es inconcluyente y no una refutación
+
+Tres defectos del experimento, todos identificados a partir de los números:
+
+1. **La clase negativa no contiene lluvia.** Los "archivos de AnuraSet sin
+   anotación de anuros" son grabaciones nocturnas junto a cuerpos de agua; lo que
+   contienen es sobre todo *insectos*, más tonales y mucho más regularmente
+   pulsados que las ranas. Eso explica directamente la periodicidad invertida. El
+   experimento comparó ranas contra otra biofonía, no contra clima.
+2. **Una tasa de repetición no puede medirse dentro de una sola repetición.** A
+   62.5 marcos por segundo, una detección de 0.25 s son 15 marcos: insuficientes
+   para contener dos ciclos de algo más lento que ~4 Hz. Medido directamente: un
+   coro sintético de 3 Hz puntúa 0.000 en una ventana de 0.25 s, 0.675 en 0.5 s y
+   1.000 desde 2 s en adelante. La mediana de `periodicity` de 0.000 en anuros es
+   ese artefacto.
+3. **La tasa de marcos de la envolvente limita qué modulación es visible.**
+   Muestrear la envolvente de banda cada 512 muestras resuelve modulación solo
+   hasta ~31 Hz, por debajo de las tasas de pulso típicas de anuros. Los valores
+   intra-evento se agrupan en 15.6 Hz, el borde del rango de búsqueda: señal de
+   estar tocando el límite, no de estar midiéndolo.
+
+Una versión anterior de la medida de periodicidad era simplemente incorrecta, y
+el material sintético lo ocultaba: la lluvia sintética puntuaba **0.93**, más alto
+que cualquier coro real, porque se genera como ruido multiplicado por una ventana
+de Hann y una envolvente suave autocorrelaciona cerca de 1.0 en todos los
+desplazamientos. Quitar la tendencia no lo resolvió — la autocorrelación
+normalizada es invariante a escala, así que encoger el residuo no lo vuelve menos
+suave. La medida ahora toma la *prominencia del primer pico local*, que evalúa la
+propiedad que de verdad importa: la autocorrelación de un tren de pulsos vuelve a
+subir en el período, la de un vaivén simplemente decae. El material con ventana de
+Hann ahora puntúa 0.000 y un tren de pulsos de 5 Hz, 1.000.
+
+### Qué hace falta para terminar esto
+
+- **Un corpus de geofonía etiquetado.** `AudioSet` está registrado en `alp-data`
+  pero no trae rutas de particiones, así que no es utilizable tal cual.
+  Grabaciones de lluvia y viento con etiquetas —ESC-50, FSD50K, o grabaciones de
+  campo anotadas en el sitio— permitirían correr la comparación real. Este es el
+  bloqueo.
+- **Modulación medida a la resolución correcta**, ya sea con un salto más fino
+  solo para la envolvente o con un espectro de modulación propiamente dicho, para
+  que las tasas de pulso por encima de 31 Hz sean visibles.
+- **Y entonces** ajustar umbrales y volver a correr `validate` para confirmar que
+  la exactitud de dominio del 6 % efectivamente se mueve.
+
+Hasta entonces la posición honesta es la que se enuncia abajo: `dominant_band` y
+los rasgos numéricos son confiables, `role` es una hipótesis.
+
+---
+
 ## Asunto 2 — Los umbrales del clasificador están sin calibrar
 
 **La decisión.** Los umbrales numéricos al inicio de `bioacoustic_detector/classifier.py` que traducen rasgos medidos en roles ecológicos.

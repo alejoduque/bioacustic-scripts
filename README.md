@@ -682,6 +682,13 @@ One file per recording, media paths relative to that file's directory.
     "centroid": 5412.0,        // Hz, magnitude-weighted, whole-spectrum
     "flatness": 0.081,         // 0-1, whole-spectrum
     "band_energies": { … },    // per band, this event's frames only
+    "band_crest": 35.1,        // within-band peak/mean — see docs/CALIBRATION.md
+    "band_entropy": 0.27,      // within-band spread, 0-1
+    "band_centroid": 1240.0,   // Hz, within the dominant band only
+    "periodicity": 0.47,       // modulation within the event, 0-1
+    "pulse_rate_hz": 15.6,
+    "context_periodicity": 0.06,  // modulation over a 4s window around it
+    "context_rate_hz": 1.2,       // RECORDED BUT NOT YET USED TO CLASSIFY
     "role": "dawn_chorus_participant",
     "domain": "biophony",
     "confidence": 0.8,         // fixed per rule — see caveat above

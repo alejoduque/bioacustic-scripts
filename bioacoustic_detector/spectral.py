@@ -6,7 +6,7 @@ spectral flatness (Wiener entropy), and band energies for 6 ecological bands.
 """
 
 import numpy as np
-from scipy.signal import resample_poly, get_window
+from scipy.signal import find_peaks, get_window, resample_poly
 from math import gcd
 
 from .config import SpectralConfig
@@ -124,6 +124,208 @@ def band_energies(mag: np.ndarray, freqs: np.ndarray,
         else:
             energies[name] = np.sum(mag[:, mask] ** 2, axis=1)
     return energies
+
+
+# --- within-band and temporal features -------------------------------------
+#
+# The global centroid and flatness answer "is this RECORDING noisy?", because
+# they average across the whole spectrum. Validation against AnuraSet showed
+# that is the wrong question: an anuran chorus below 2 kHz and rain below 2 kHz
+# produce nearly the same global descriptors, so no threshold on them can tell
+# a frog from a stream. These features ask about the event's own band, and about
+# how its energy is organised in time — which is where the two genuinely differ.
+
+def band_mask(freqs: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    """Boolean mask selecting the FFT bins of one band."""
+    return (freqs >= lo) & (freqs < hi)
+
+
+def band_crest(mag: np.ndarray, mask: np.ndarray) -> float:
+    """
+    Peak-to-mean ratio of the mean spectrum within one band.
+
+    High when the band's energy sits in a few narrow peaks (a call with a
+    dominant frequency and harmonics), low when it is spread smoothly across
+    the band (rain, wind, water).
+
+    Used in preference to a within-band Wiener flatness, which is what this
+    module tried first: the geometric mean underflows as soon as any bin is
+    near zero — measured at 3e-10 against a band mean of 15 on real audio — so
+    flatness saturated at 0 for anurans and background alike and separated
+    nothing. Crest is a ratio of means and has no such failure mode.
+    """
+    if not np.any(mask) or mag.size == 0:
+        return 0.0
+    spectrum = np.mean(mag[:, mask], axis=0)
+    mean = float(np.mean(spectrum))
+    return float(np.max(spectrum) / mean) if mean > 0 else 0.0
+
+
+def band_entropy(mag: np.ndarray, mask: np.ndarray) -> float:
+    """
+    Normalised Shannon entropy of the energy distribution across a band's bins.
+
+    1.0 = energy spread evenly over the band (noise-like), 0.0 = all energy in
+    one bin (pure tone). The stable counterpart to within-band flatness: it is
+    computed on a normalised probability vector, so no bin can drag it to zero.
+    """
+    if not np.any(mask) or mag.size == 0:
+        return 0.0
+    spectrum = np.mean(mag[:, mask] ** 2, axis=0)
+    total = float(np.sum(spectrum))
+    n_bins = int(np.count_nonzero(mask))
+    if total <= 0 or n_bins < 2:
+        return 0.0
+    p = spectrum / total
+    p = p[p > 0]
+    return float(-np.sum(p * np.log(p)) / np.log(n_bins))
+
+
+def within_band_centroid(mag: np.ndarray, freqs: np.ndarray,
+                         mask: np.ndarray) -> float:
+    """Spectral centroid within one band, in Hz."""
+    if not np.any(mask) or mag.size == 0:
+        return 0.0
+    band_mag = mag[:, mask]
+    band_freqs = freqs[mask]
+    total = np.sum(band_mag)
+    if total <= 0:
+        return float(np.mean(band_freqs))
+    return float(np.sum(band_mag * band_freqs[np.newaxis, :]) / total)
+
+
+def band_envelope(mag: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Per-frame energy within one band — the amplitude envelope of the band."""
+    if not np.any(mask) or mag.size == 0:
+        return np.zeros(mag.shape[0])
+    return np.sum(mag[:, mask] ** 2, axis=1)
+
+
+def envelope_periodicity(envelope: np.ndarray, frame_rate_hz: float,
+                         min_rate_hz: float = 0.5,
+                         max_rate_hz: float = 20.0) -> tuple[float, float]:
+    """
+    Strength and rate of periodic amplitude modulation.
+
+    Returns (periodicity 0-1, pulse rate in Hz).
+
+    This is the feature that separates a chorus from weather. A calling
+    assemblage is a pulse train — individual calls repeat at a species-typical
+    rate, and even overlapping callers leave strong modulation in the band
+    envelope. Rain and wind are aperiodic: their envelope autocorrelation decays
+    without a peak.
+
+    Implemented as the normalised autocorrelation of the DETRENDED envelope,
+    with the peak taken over lags corresponding to `min_rate_hz`..`max_rate_hz`.
+    Returns (0, 0) when the event is too short to resolve the slowest rate,
+    rather than reporting a spurious peak from one or two cycles.
+
+    The strength is taken from the first prominent LOCAL PEAK of the
+    autocorrelation, not from its maximum value. That distinction is the whole
+    measure. Normalised autocorrelation is scale-invariant, so any smooth
+    envelope — a shower fading in and out, a fixture windowed with a Hann taper —
+    correlates near 1.0 at short lags no matter how small its variation is;
+    detrending does not help, because it shrinks the residual without making it
+    less smooth. What separates a pulse train from a smooth swell is that the
+    former's autocorrelation *comes back up* at the period, and the latter's
+    simply decays. Requiring a peak tests for exactly that, and the first
+    qualifying peak gives the fundamental rate rather than one of its multiples.
+    """
+    n = len(envelope)
+    if n < 8 or frame_rate_hz <= 0:
+        return 0.0, 0.0
+
+    min_lag = max(1, int(frame_rate_hz / max_rate_hz))
+    max_lag = int(frame_rate_hz / min_rate_hz)
+    # Need at least two full cycles of the slowest rate examined
+    max_lag = min(max_lag, n // 2)
+    if max_lag <= min_lag:
+        return 0.0, 0.0
+
+    # Detrend: remove variation slower than min_rate_hz
+    trend_window = min(n, max(3, int(frame_rate_hz / min_rate_hz)))
+    if trend_window > 1:
+        kernel = np.ones(trend_window) / trend_window
+        trend = np.convolve(envelope, kernel, mode="same")
+        x = envelope - trend
+    else:
+        x = envelope - np.mean(envelope)
+
+    x = x - np.mean(x)
+    denom = float(np.dot(x, x))
+    if denom <= 0:
+        return 0.0, 0.0
+
+    ac = np.correlate(x, x, mode="full")[n - 1:] / denom
+    window = ac[min_lag:max_lag + 1]
+    if window.size < 3:
+        return 0.0, 0.0
+
+    peaks, props = find_peaks(window, prominence=0.05)
+    if peaks.size == 0:
+        return 0.0, 0.0
+
+    first = int(peaks[0])
+    lag = first + min_lag
+    # Report the peak's prominence, not its height: height inherits whatever
+    # smooth correlation the envelope already had, prominence is the part that
+    # is actually periodic.
+    strength = float(np.clip(props["prominences"][0], 0.0, 1.0))
+    return strength, float(frame_rate_hz / lag)
+
+
+# A repetition rate cannot be measured inside a single repetition. At a 62.5 Hz
+# frame rate a 0.25 s detection is 15 frames, which cannot hold two cycles of
+# anything slower than ~4 Hz — measured periodicity was 0.000 for most real
+# anuran detections for exactly this reason. Modulation is therefore measured
+# over a context window around the event, not over the event alone.
+MIN_PERIODICITY_WINDOW_S = 4.0
+
+
+def event_band_features(mag: np.ndarray, freqs: np.ndarray,
+                        band_range: tuple[float, float],
+                        frame_rate_hz: float,
+                        context_mag: np.ndarray | None = None) -> dict:
+    """
+    All within-band and temporal features for one event's dominant band.
+
+    `mag` is the magnitude spectrogram restricted to the event's frames, and is
+    what the spectral shape features (crest, entropy, centroid) describe.
+
+    `context_mag` is a longer window around the event, used only for the
+    temporal features. Call rate is a property of the sequence an event belongs
+    to, not of the event: measuring it on a single 0.25 s call yields nothing at
+    all. Falls back to `mag` when no context is supplied, which is correct for
+    events already longer than MIN_PERIODICITY_WINDOW_S.
+    """
+    mask = band_mask(freqs, band_range[0], band_range[1])
+
+    # Two time scales, because they measure different things and it is not yet
+    # established which one carries the frog/weather distinction:
+    #   periodicity          within the event — pulse structure inside a call
+    #   context_periodicity  over a wider window — the repetition rate of calls
+    # Measured on real anuran calls, the two disagree sharply (0.47 vs 0.06 on
+    # the same events), so collapsing them into one number would throw away the
+    # evidence needed to choose. Both are recorded; neither is yet used to
+    # classify. See docs/CALIBRATION.md.
+    periodicity, pulse_rate = envelope_periodicity(
+        band_envelope(mag, mask), frame_rate_hz)
+
+    if context_mag is not None:
+        ctx_periodicity, ctx_rate = envelope_periodicity(
+            band_envelope(context_mag, mask), frame_rate_hz)
+    else:
+        ctx_periodicity, ctx_rate = periodicity, pulse_rate
+
+    return {
+        "band_crest": round(band_crest(mag, mask), 3),
+        "band_entropy": round(band_entropy(mag, mask), 4),
+        "band_centroid": round(within_band_centroid(mag, freqs, mask), 1),
+        "periodicity": round(periodicity, 4),
+        "pulse_rate_hz": round(pulse_rate, 3),
+        "context_periodicity": round(ctx_periodicity, 4),
+        "context_rate_hz": round(ctx_rate, 3),
+    }
 
 
 def compute_freq_axis(frame_size: int, sr: int) -> np.ndarray:

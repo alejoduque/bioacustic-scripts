@@ -82,6 +82,85 @@ This could not have been found on synthetic audio. The synthetic "amphibians" in
 
 ---
 
+## Attempt at the fix, and what it established (2026-07-30)
+
+The obvious response to the finding above is to add features that describe the
+event's own band and its temporal structure. Both are now implemented and
+recorded in `events.json`:
+
+| Feature | Measures |
+|---|---|
+| `band_crest` | peak-to-mean of the mean spectrum within the dominant band |
+| `band_entropy` | normalised entropy across that band's bins — spread vs concentrated |
+| `band_centroid` | where inside its own band the energy sits |
+| `periodicity` / `pulse_rate_hz` | amplitude modulation measured **within the event** |
+| `context_periodicity` / `context_rate_hz` | the same over a ≥4 s window **around** the event |
+
+**They are not wired into classification, and should not be until the
+measurement below is repeated with the missing data.** Recording them costs
+nothing and gives the eventual calibration real features to fit.
+
+### Measured on 60 AnuraSet recordings
+
+186 detections matching an expert anuran annotation, against 202 detections from
+AnuraSet files carrying no annotation:
+
+| | anuran (n=186) | unannotated (n=202) |
+|---|---|---|
+| `band_crest` median | 35.06 | 35.61 |
+| `band_entropy` median | 0.271 | 0.214 |
+| `periodicity` median | 0.000 | 0.112 |
+
+**No separation. On periodicity the ordering is inverted.** At every threshold
+tried, the negative class was retained at an equal or higher rate than the
+positive one.
+
+### Why this is inconclusive rather than a refutation
+
+Three defects in the experiment, all identified from the numbers:
+
+1. **The negative class contains no rain.** "AnuraSet files with no anuran
+   annotation" are pond recordings at night; what is in them is largely
+   *insects*, which are more tonal and far more regularly pulsed than frogs.
+   That explains the inverted periodicity directly. The experiment compared
+   frogs against other biophony, not against weather.
+2. **A repetition rate cannot be measured inside a single repetition.** At a
+   62.5 Hz frame rate a 0.25 s detection is 15 frames, too few to hold two
+   cycles of anything slower than about 4 Hz. Measured directly: a synthetic
+   3 Hz chorus scores 0.000 in a 0.25 s window, 0.675 at 0.5 s, and 1.000 from
+   2 s upward. The median anuran `periodicity` of 0.000 is this artefact.
+3. **The envelope frame rate caps what modulation is visible.** Sampling the
+   band envelope every 512 samples resolves modulation only up to ~31 Hz, below
+   typical anuran pulse rates. The within-event values cluster at 15.6 Hz, the
+   edge of the search range — a sign of hitting the limit, not of measuring it.
+
+An earlier version of the periodicity measure was also simply wrong, and the
+fixture hid it: synthetic rain scored **0.93**, higher than any real chorus,
+because it is generated as noise multiplied by a Hann window and a smooth
+envelope autocorrelates near 1.0 at every lag. Detrending did not fix it —
+normalised autocorrelation is scale-invariant, so shrinking the residual does
+not make it less smooth. The measure now takes the *prominence of the first
+local peak*, which tests the property that actually matters: a pulse train's
+autocorrelation comes back up at the period, a swell's merely decays. The Hann
+fixture now scores 0.000 and a 5 Hz pulse train 1.000.
+
+### What is needed to finish this
+
+- **A labelled geophony corpus.** `AudioSet` is registered in `alp-data` but
+  ships no split paths, so it is not usable as-is. Rain and wind recordings with
+  labels — ESC-50, FSD50K, or field recordings annotated at the site — would let
+  the real comparison run. This is the blocker.
+- **Modulation measured at the right resolution**, either from a finer hop for
+  the envelope alone or from a proper modulation spectrum, so pulse rates above
+  31 Hz are visible.
+- **Then** fit thresholds, and re-run `validate` to confirm the domain accuracy
+  of 6 % actually moves.
+
+Until then the honest position is the one stated below: `dominant_band` and the
+numeric features are trustworthy, `role` is a hypothesis.
+
+---
+
 ## Open item 2 — Classifier thresholds are uncalibrated
 
 **The decision.** The numeric thresholds at the top of `bioacoustic_detector/classifier.py` that map measured features onto ecological roles.

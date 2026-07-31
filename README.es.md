@@ -684,6 +684,13 @@ Un archivo por grabación, con rutas de medios relativas al directorio de ese ar
     "centroid": 5412.0,        // Hz, ponderado por magnitud, espectro completo
     "flatness": 0.081,         // 0-1, espectro completo
     "band_energies": { … },    // por banda, solo los marcos de este evento
+    "band_crest": 35.1,        // pico/media dentro de la banda — ver docs/CALIBRACION.md
+    "band_entropy": 0.27,      // dispersión dentro de la banda, 0-1
+    "band_centroid": 1240.0,   // Hz, solo dentro de la banda dominante
+    "periodicity": 0.47,       // modulación dentro del evento, 0-1
+    "pulse_rate_hz": 15.6,
+    "context_periodicity": 0.06,  // modulación en una ventana de 4s alrededor
+    "context_rate_hz": 1.2,       // REGISTRADO PERO AÚN NO USADO PARA CLASIFICAR
     "role": "dawn_chorus_participant",
     "domain": "biophony",
     "confidence": 0.8,         // fijo por regla — ver la salvedad arriba

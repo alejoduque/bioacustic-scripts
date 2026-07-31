@@ -133,12 +133,18 @@ def classify_event(onset_s: float, offset_s: float,
                    band_energies: dict[str, float],
                    recording_datetime: datetime | None = None,
                    prev_event_flux: float | None = None,
-                   config: SpectralConfig | None = None) -> Classification:
+                   config: SpectralConfig | None = None,
+                   band_features: dict | None = None) -> Classification:
     """
     Classify an acoustic event by its ecological role.
 
     Uses: time of day, dominant frequency band, spectral flatness
     (tonal vs noise-like), event duration, and energy distribution.
+
+    `band_features` carries the within-band and temporal measurements from
+    spectral.event_band_features (`band_crest`, `band_entropy`, `periodicity`,
+    `pulse_rate_hz`). They are optional so older callers keep working, but
+    without them the low band cannot be resolved — see `_classify_low_band`.
     """
     if config is None:
         config = SpectralConfig()
@@ -160,7 +166,7 @@ def classify_event(onset_s: float, offset_s: float,
     role, confidence, reasoning = _classify_features(
         hour, duration, centroid, flatness, peak_flux,
         dominant_band, dominant_ratio, band_energies,
-        prev_event_flux,
+        prev_event_flux, band_features or {},
     )
 
     return Classification(
@@ -176,7 +182,8 @@ def _classify_features(hour: int, duration: float,
                        centroid: float, flatness: float, peak_flux: float,
                        dominant_band: str, dominant_ratio: float,
                        band_energies: dict[str, float],
-                       prev_event_flux: float | None) -> tuple[str, float, str]:
+                       prev_event_flux: float | None,
+                       band_features: dict | None = None) -> tuple[str, float, str]:
     """
     Rule-based classification using spectral features.
 
