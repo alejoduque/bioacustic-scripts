@@ -170,11 +170,11 @@ candidate: insect chorus (40%)  ultrasonic mid  27.7 kHz  5.8s  13 Hz pulse  NDS
 probable: dawn chorus participant (80%)   biophony mid  5.4 kHz  5.0s  NDSI +1.00  ACI 446
 ```
 
-**Right — measured.** A metadata column padded onto the frame carries everything known about the clip, in four groups: **SITE** (station id, locality, latitude, longitude, elevation, land cover, CORINE code, season), **RECORDER** (device id, date, time, temperature, sample rate, battery), **EVENT** (onset, length, band, centroid, in-band centroid, crest, entropy, pulse rate) and **INDICES** (ACI, BIO, NDSI, ADI, AEI). All of it measured or surveyed.
+**Right — measured.** A metadata column padded onto the frame carries everything known about the clip, in four groups: **SITE** (station id, locality, latitude, longitude, elevation, land cover, season), **RECORDER** (device id, date, time, temperature, sample rate, battery), **EVENT** (onset, length, band shares, centroid, in-band centroid, crest, entropy, pulse rate) and **INDICES** (ACI, BIO, NDSI, ADI, AEI). All of it measured or surveyed.
 
 Coordinates come from the survey's GIS layer, not the recorder: `sites.py` reads a KML of sampling points and matches each recording to its station by land cover and date. Without such a layer those lines are simply absent.
 
-The plot itself starts at **200 Hz** rather than 0 — below that a field recording carries rumble, wind on the case and DC drift, and on a log axis that dead range ate a third of the height. It is also bracketed around the event's own band (three octaves down, two up), so the picture concentrates on what was detected. `--no-focus` restores the full range, `--min-freq` moves the floor.
+The plot itself starts at **200 Hz** rather than 0 — below that a field recording carries rumble, wind on the case and DC drift, and on a log axis that dead range ate a third of the height. It is also bracketed around every band the event actually carried (union of all bands holding ≥10% of its energy — see the multi-label mix below), widened by a small octave margin (one down, half up) for a little breathing room. Bracketing around only the single dominant band, with generous margins to compensate, used to leave a wide dead stretch of low frequencies with nothing in it; the union already spans the activity, so the margin doesn't need to manufacture context. `--no-focus` restores the full range, `--min-freq` moves the floor.
 
 **Left — inferred.** Every voice the event carries, joined with `+`, then how far the claim goes:
 

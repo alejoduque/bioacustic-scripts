@@ -139,15 +139,17 @@ class VideoConfig:
     # frequencies the event actually occupies.
     min_freq: int = 200
 
-    # Bracket the plot around the event's own band rather than showing the
-    # whole spectrum. Generous margins (two octaves either side) keep enough
-    # context to see what else was happening.
+    # Bracket the plot around the bands the event actually carried, rather
+    # than the whole spectrum. band_lo_hz/band_hi_hz already span every band
+    # holding a meaningful share of the event's energy (see
+    # pipeline._event_freq_range), so the margin here only needs to add a
+    # little breathing room, not manufacture context for a single narrow band.
     focus_on_event: bool = True
     # Asymmetric on purpose. Widening upward mostly adds noise floor, while
     # widening downward keeps anuran and low-passerine activity in view — the
     # content most easily lost when a louder high band sets the focus.
-    focus_margin_octaves_up: float = 2.0
-    focus_margin_octaves_down: float = 3.0
+    focus_margin_octaves_up: float = 0.5
+    focus_margin_octaves_down: float = 1.0
 
     # Width in pixels of the metadata column padded onto the right of the
     # frame. 0 removes the column.

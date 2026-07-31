@@ -94,6 +94,27 @@ def find_wav_files(paths: str | list[str]) -> list[str]:
 
 # --- single recording -------------------------------------------------------
 
+def _event_freq_range(bands: dict, mix: list, classification) -> dict:
+    """
+    Frequency span to plot: the union of every band that actually carried the
+    event, not just the loudest one.
+
+    A pond event split 44/31/24 across biophony_high/mid and ultrasonic_low
+    once windowed only on the dominant (smallest, 24%) band — bracketing the
+    spectrogram around 16-64 kHz while the visible pulsing signal sat at
+    1.5-2.5 kHz. Spanning every band in the mix keeps the plot on what a
+    viewer actually sees.
+    """
+    names = [n for n, _ in mix] or [classification.dominant_band]
+    ranges = [bands[n] for n in names if n in bands]
+    if not ranges:
+        return {"band_lo_hz": 0, "band_hi_hz": 0}
+    return {
+        "band_lo_hz": min(lo for lo, _ in ranges),
+        "band_hi_hz": max(hi for _, hi in ranges),
+    }
+
+
 def classify_all(events: list[Event], spectral_result: dict,
                  recording_meta: dict, config: Config,
                  site_fields: dict | None = None
@@ -176,10 +197,7 @@ def classify_all(events: list[Event], spectral_result: dict,
             "domains": sorted({v.domain for v in voices}),
             "band_mix": band_mix,
             "band_shares": {n: round(s, 4) for n, s in mix},
-            "band_lo_hz": config.spectral.bands.get(
-                classification.dominant_band, (0, 0))[0],
-            "band_hi_hz": config.spectral.bands.get(
-                classification.dominant_band, (0, 0))[1],
+            **_event_freq_range(config.spectral.bands, mix, classification),
             "reasoning": classification.reasoning,
         }))
 
