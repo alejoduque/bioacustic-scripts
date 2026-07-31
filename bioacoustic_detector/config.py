@@ -89,6 +89,20 @@ class ClipConfig:
     # "role" -> clips/<domain>/<role>/, "domain" -> clips/<domain>/, "flat" -> clips/
     organize_by: str = "role"
 
+    # Fixed-length clips anchored on the event onset, rather than the event
+    # padded by pre/post-roll. Set fixed_duration_s to 60 with pre_s 30 to get
+    # "30 seconds before the onset, 30 seconds after" — a uniform one-minute
+    # clip whatever the event's own length. Without this a 40-second event
+    # yields a 70-second file, and dense events yield near-duplicate clips.
+    # 0 disables it and restores the pre/post-roll behaviour.
+    fixed_duration_s: float = 0.0
+    fixed_pre_s: float = 30.0
+
+    # Minimum spacing between the onsets that earn a clip. With 60-second
+    # windows, two events eight seconds apart produce two almost identical
+    # files; this suppresses the second. Defaults to half the clip length.
+    min_separation_s: float = 0.0
+
     # Per-clip renders
     make_video: bool = True     # scrolling spectrogram MP4
     make_poster: bool = True    # static spectrogram PNG + thumbnail (gallery covers)

@@ -212,8 +212,21 @@ def flow_detect(state: dict) -> None:
         state.get("sensitivity", "balanced"))
 
     print(f"\n{dim('Clips carry context on both sides of the event.')}")
-    pre_roll = ask_number("Seconds before onset", state.get("pre_roll", 20.0))
-    post_roll = ask_number("Seconds after offset", state.get("post_roll", 10.0))
+    fixed = ask_bool(
+        "Cut every clip to the same length, centred on the onset?", True)
+    clip_duration = clip_pre = 0.0
+    pre_roll, post_roll = 20.0, 10.0
+    if fixed:
+        print(dim("  One comparable file per moment, whatever the event's own"))
+        print(dim("  length. Long events stop producing long files, and dense"))
+        print(dim("  events stop producing near-duplicate clips."))
+        clip_duration = ask_number("Clip length in seconds",
+                                   state.get("clip_duration", 60.0))
+        clip_pre = ask_number("Seconds before the onset",
+                              state.get("clip_pre", clip_duration / 2))
+    else:
+        pre_roll = ask_number("Seconds before onset", state.get("pre_roll", 20.0))
+        post_roll = ask_number("Seconds after offset", state.get("post_roll", 10.0))
 
     domains = ask_multi("Which acoustic domains do you want clips for?",
                         ["biophony", "geophony", "anthrophony", "transition"])
@@ -243,7 +256,8 @@ def flow_detect(state: dict) -> None:
 
     config = Config(
         detector=detector,
-        clip=ClipConfig(make_video=make_video, make_poster=make_poster,
+        clip=ClipConfig(fixed_duration_s=clip_duration, fixed_pre_s=clip_pre,
+                        make_video=make_video, make_poster=make_poster,
                         make_gif=make_gif, make_reels=make_reels,
                         roles=roles, domains=domains),
         video=VideoConfig(),
@@ -256,6 +270,7 @@ def flow_detect(state: dict) -> None:
 
     state.update({"input": source, "output": output, "sensitivity": preset,
                   "pre_roll": pre_roll, "post_roll": post_roll,
+                  "clip_duration": clip_duration, "clip_pre": clip_pre,
                   "dps": days_per_second})
 
     from .pipeline import find_wav_files, run_batch
@@ -279,7 +294,8 @@ def flow_detect(state: dict) -> None:
         ("recordings", f"{len(wav_files)} file(s)"),
         ("output", output),
         ("sensitivity", f"{preset} (threshold {detector.threshold_factor} MAD)"),
-        ("clip padding", f"-{pre_roll:g}s / +{post_roll:g}s"),
+        ("clips", f"fixed {clip_duration:g}s, onset at +{clip_pre:g}s"
+         if clip_duration > 0 else f"event -{pre_roll:g}s / +{post_roll:g}s"),
         ("domains", ", ".join(domains) if domains else "all"),
         ("event types", ", ".join(roles) if roles else "all"),
         ("media", ", ".join(filter(None, [

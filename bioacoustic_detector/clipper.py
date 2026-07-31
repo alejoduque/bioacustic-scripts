@@ -10,6 +10,7 @@ event in the parliament ends up with its own folder of evidence.
 """
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import soundfile as sf
@@ -49,6 +50,59 @@ def select_events(pairs: list[tuple[Event, dict]],
     return kept
 
 
+def apply_fixed_windows(pairs: list[tuple[Event, dict]],
+                        audio_duration_s: float,
+                        config: ClipConfig | None = None
+                        ) -> list[tuple[Event, dict]]:
+    """
+    Re-cut each kept event to a fixed-length window anchored on its onset, and
+    drop events that would produce a near-duplicate of the previous window.
+
+    The pre/post-roll model sizes the clip to the event, which is right when
+    the event *is* the thing of interest but wrong for a survey: a 40-second
+    insect chorus becomes a 70-second file, and ten events inside one minute
+    become ten copies of that minute. A fixed window with a minimum onset
+    separation gives one comparable file per moment worth looking at.
+
+    Events are assumed sorted by onset, which detect_events guarantees.
+    """
+    config = config or ClipConfig()
+    if config.fixed_duration_s <= 0:
+        return pairs
+
+    duration = config.fixed_duration_s
+    pre = min(config.fixed_pre_s, duration)
+    separation = (config.min_separation_s if config.min_separation_s > 0
+                  else duration / 2.0)
+
+    kept: list[tuple[Event, dict]] = []
+    last_kept_onset = None
+
+    for event, data in pairs:
+        if last_kept_onset is not None and (event.onset_s - last_kept_onset) < separation:
+            data["clip_skipped"] = "within min_separation of the previous clip"
+            # No clip was cut, so the inherited pre/post-roll window would be a
+            # window that does not exist on disk. Clear it rather than let the
+            # catalogue advertise it.
+            data["clip_start_s"] = None
+            data["clip_end_s"] = None
+            continue
+
+        start = event.onset_s - pre
+        # Slide, don't shrink, at the file edges: a window that runs past the
+        # start or end is moved inward so every clip has the same length.
+        start = max(0.0, min(start, max(0.0, audio_duration_s - duration)))
+        end = min(audio_duration_s, start + duration)
+
+        windowed = replace(event, clip_start_s=start, clip_end_s=end)
+        data["clip_start_s"] = round(start, 3)
+        data["clip_end_s"] = round(end, 3)
+        kept.append((windowed, data))
+        last_kept_onset = event.onset_s
+
+    return kept
+
+
 def clip_subdir(event_data: dict, organize_by: str = "role") -> Path:
     """Relative directory for an event's clip, based on its classification."""
     domain = _safe(event_data.get("domain", "unknown"))
@@ -62,10 +116,17 @@ def clip_subdir(event_data: dict, organize_by: str = "role") -> Path:
 
 
 def clip_filename(event: Event, event_data: dict) -> str:
-    """Self-describing clip name: index, role, and position in the recording."""
+    """
+    Self-describing clip name: index, role, and the span the file contains.
+
+    Named by the CLIP window, not the event bounds. With fixed-length windows a
+    30-minute event yields a 60-second file, and naming that file after the
+    event would claim half an hour of audio that is not in it.
+    """
     index = event_data.get("event_index", 0)
     role = _safe(event_data.get("role", "event"))
-    return f"event_{index:03d}_{role}_{event.onset_s:.1f}s-{event.offset_s:.1f}s.wav"
+    return (f"event_{index:03d}_{role}_"
+            f"{event.clip_start_s:.1f}s-{event.clip_end_s:.1f}s.wav")
 
 
 def extract_clip(source_path: str, event: Event, event_data: dict,

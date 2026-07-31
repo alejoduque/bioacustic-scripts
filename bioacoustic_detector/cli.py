@@ -108,6 +108,16 @@ def _add_detect_parser(sub) -> None:
     m.add_argument("--organize-by", choices=("role", "domain", "flat"),
                    default="role",
                    help="Clip directory layout (default: role)")
+    m.add_argument("--clip-duration", type=float, default=0.0,
+                   help="Fixed clip length in seconds, anchored on the event "
+                        "onset (e.g. 60 with --clip-pre 30 gives 30s before "
+                        "and 30s after). 0 = size the clip to the event using "
+                        "pre/post-roll (default)")
+    m.add_argument("--clip-pre", type=float, default=30.0,
+                   help="Seconds before the onset inside a fixed clip (30)")
+    m.add_argument("--min-separation", type=float, default=0.0,
+                   help="Minimum seconds between clipped onsets, to avoid "
+                        "near-duplicate windows (default: half the clip length)")
     m.add_argument("--no-video", action="store_true",
                    help="Skip spectrogram MP4 generation")
     m.add_argument("--no-poster", action="store_true",
@@ -275,6 +285,9 @@ def config_from_detect_args(args: argparse.Namespace) -> Config:
         detector=detector,
         clip=ClipConfig(
             organize_by=args.organize_by,
+            fixed_duration_s=args.clip_duration,
+            fixed_pre_s=args.clip_pre,
+            min_separation_s=args.min_separation,
             make_video=not args.no_video,
             make_poster=not args.no_poster,
             make_gif=args.gif,

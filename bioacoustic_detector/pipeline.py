@@ -1,10 +1,23 @@
 """
 The processing pipeline, shared by the CLI and the wizard.
 
-One recording:
-    audio -> metadata -> spectral features -> events -> classification
-          -> filtered selection -> clips -> per-event video/poster/gif
-          -> per-type reels -> events.json -> OSC -> HTML report
+One recording, in two passes:
+
+    PASS 1 (streaming)  scan the whole file for change
+        audio blocks -> per-frame flux/centroid/flatness/band energies
+                     -> events -> classification
+        The magnitude spectrogram is never held in full. An hour at 192 kHz
+        would need ~11 GB as one array; the per-frame series cost ~170 MB, and
+        detection only ever needed the flux.
+
+    PASS 2 (per clip)   measure and render what was found
+        fixed-length window per event -> clip wav -> analyse THAT
+                                      -> indices, within-band features
+                                      -> video/poster/gif -> per-type reels
+        The clip is a minute, so the spectrogram is bounded however long the
+        source recording was.
+
+    then: events.json -> OSC -> HTML report
 
 A batch adds the cross-recording layer that the whole toolkit exists for:
     results -> phenological calendar -> OSC score/stream -> gallery -> summary
@@ -33,8 +46,8 @@ from .osc_output import (generate_phenology_supercollider_score,
 from .phenology import (build_phenological_calendar, generate_phenology_html,
                         write_phenology_csv)
 from .report import generate_event_report, generate_summary_report
-from .spectral import (MIN_PERIODICITY_WINDOW_S, analyze,
-                       event_band_features)
+from .clipper import apply_fixed_windows
+from .spectral import analyze, event_band_features, stream_features
 from .video import build_event_type_reels, render_all_clips
 
 def video_config_for(config: Config, sample_rate: int) -> VideoConfig:
@@ -89,8 +102,10 @@ def classify_all(events: list[Event], spectral_result: dict,
     aligned — an earlier version zipped two separately-filtered lists and could
     attach the wrong clip to an event.
     """
-    magnitude = spectral_result["magnitude"]
-    n_frames = magnitude.shape[0]
+    # Works from the per-frame series alone, so it runs on streamed output.
+    # Anything needing FFT bins — acoustic indices, within-band features — is
+    # computed later per clip, where the window is a minute rather than an hour.
+    n_frames = len(spectral_result["flux"])
 
     pairs: list[tuple[Event, dict]] = []
     classifications: list[Classification] = []
@@ -104,7 +119,6 @@ def classify_all(events: list[Event], spectral_result: dict,
         if f_end <= f_start:
             continue
 
-        event_mag = magnitude[f_start:f_end]
         event_centroid = float(np.mean(spectral_result["centroid"][f_start:f_end]))
         event_flatness = float(np.mean(spectral_result["flatness"][f_start:f_end]))
 
@@ -112,30 +126,6 @@ def classify_all(events: list[Event], spectral_result: dict,
             name: float(np.mean(series[f_start:f_end]))
             for name, series in spectral_result["band_energies"].items()
         }
-
-        event_indices = compute_all_indices(event_mag, spectral_result["freqs"],
-                                            config.spectral)
-
-        # Within-band and temporal features, computed on the event's dominant
-        # band. The global centroid/flatness cannot tell a low-frequency chorus
-        # from low-frequency weather; these describe the band the event actually
-        # occupies, and how its energy is organised in time.
-        dominant = max(event_bands, key=event_bands.get) if event_bands else ""
-        band_feats = {}
-        if dominant and dominant in config.spectral.bands:
-            frame_rate = spectral_result["sr"] / spectral_result["hop_size"]
-            # Widen a short event to a context window for the temporal features
-            # only; call rate belongs to the sequence, not to one call.
-            need = int(MIN_PERIODICITY_WINDOW_S * frame_rate)
-            if (f_end - f_start) < need:
-                pad = (need - (f_end - f_start)) // 2
-                c0, c1 = max(0, f_start - pad), min(n_frames, f_end + pad)
-            else:
-                c0, c1 = f_start, f_end
-            band_feats = event_band_features(
-                event_mag, spectral_result["freqs"],
-                config.spectral.bands[dominant], frame_rate,
-                context_mag=magnitude[c0:c1])
 
         classification = classify_event(
             event.onset_s, event.offset_s,
@@ -165,11 +155,89 @@ def classify_all(events: list[Event], spectral_result: dict,
             "confidence": round(classification.confidence, 3),
             "dominant_band": classification.dominant_band,
             "reasoning": classification.reasoning,
-            **band_feats,
-            **event_indices,
         }))
 
     return pairs, classifications
+
+
+def sampled_file_indices(wav_path: str, config: Config,
+                         max_seconds: float = 60.0) -> dict:
+    """
+    Whole-recording acoustic indices, estimated from a bounded sample.
+
+    The indices are defined over a spectrogram, and a streamed recording never
+    has one in full. Rather than hold 11 GB to characterise an hour, this reads
+    up to `max_seconds` of audio spread evenly across the file and computes the
+    indices on that. For a stationary soundscape the estimate is close; for a
+    changing one it is a fair average of the whole, which is what a
+    whole-recording summary means anyway.
+
+    Per-event indices are exact — those are computed on the actual clip.
+    """
+    info = sf.info(wav_path)
+    sr, total = info.samplerate, info.frames
+    want = int(max_seconds * sr)
+
+    if total <= want:
+        audio, _ = sf.read(wav_path, dtype="float64", always_2d=True)
+        chunk = audio.mean(axis=1)
+    else:
+        n_slices = 6
+        per = want // n_slices
+        step = (total - per) // max(1, n_slices - 1)
+        pieces = []
+        for i in range(n_slices):
+            block, _ = sf.read(wav_path, start=i * step, frames=per,
+                               dtype="float64", always_2d=True)
+            pieces.append(block.mean(axis=1))
+        chunk = np.concatenate(pieces)
+
+    result = analyze(chunk, sr, config.spectral)
+    indices = compute_all_indices(result["magnitude"], result["freqs"],
+                                  config.spectral)
+    indices["_estimated_from_s"] = round(len(chunk) / sr, 1)
+    return indices
+
+
+def analyse_clips(clip_paths: list[str], pairs: list[tuple[Event, dict]],
+                  config: Config) -> None:
+    """
+    PASS 2 — measure each extracted clip, in place.
+
+    Everything that needs FFT bins happens here: acoustic indices and the
+    within-band and temporal features. The clip is a minute at most, so the
+    spectrogram is bounded no matter how long the source recording was.
+
+    Indices are computed over the event's own frames inside the clip, not the
+    whole clip, so they mean the same thing they did before this became a
+    two-pass pipeline. The periodicity features deliberately use the full clip,
+    since call rate is a property of the surrounding sequence.
+    """
+    for clip_path, (event, data) in zip(clip_paths, pairs):
+        if not clip_path or not Path(clip_path).is_file():
+            continue
+        audio, sr = sf.read(clip_path, dtype="float64", always_2d=True)
+        mono = audio.mean(axis=1)
+        result = analyze(mono, sr, config.spectral)
+        mag, freqs = result["magnitude"], result["freqs"]
+        n_frames = mag.shape[0]
+        if not n_frames:
+            continue
+
+        # Locate the event inside its clip
+        frame_rate = result["sr"] / result["hop_size"]
+        f0 = int(max(0, (event.onset_s - event.clip_start_s) * frame_rate))
+        f1 = int(min(n_frames, (event.offset_s - event.clip_start_s) * frame_rate) + 1)
+        f0 = min(f0, n_frames - 1)
+        f1 = max(f0 + 1, min(f1, n_frames))
+
+        data.update(compute_all_indices(mag[f0:f1], freqs, config.spectral))
+
+        dominant = data.get("dominant_band", "")
+        if dominant in config.spectral.bands:
+            data.update(event_band_features(
+                mag[f0:f1], freqs, config.spectral.bands[dominant],
+                frame_rate, context_mag=mag))
 
 
 def process_single_file(wav_path: str, config: Config) -> dict:
@@ -183,10 +251,9 @@ def process_single_file(wav_path: str, config: Config) -> dict:
     print(f"Processing: {filename}")
     print(f"{'=' * 60}")
 
-    print("  Reading audio...")
-    audio, sr = sf.read(wav_path, dtype="float64")
-    audio_mono = np.mean(audio, axis=1) if audio.ndim > 1 else audio
-    duration_s = len(audio_mono) / sr
+    info = sf.info(wav_path)
+    sr = info.samplerate
+    duration_s = info.frames / sr
     print(f"  Duration: {duration_s:.1f}s, SR: {sr}Hz")
 
     target = config.spectral.target_sr
@@ -206,17 +273,21 @@ def process_single_file(wav_path: str, config: Config) -> dict:
     recording_meta["duration_s"] = duration_s
     recording_meta["samplerate_hz"] = sr
 
-    print("  Computing spectral features...")
-    spectral_result = analyze(audio_mono, sr, config.spectral)
-
-    print("  Computing acoustic indices...")
-    file_indices = compute_all_indices(spectral_result["magnitude"],
-                                       spectral_result["freqs"], config.spectral)
+    # PASS 1 — scan the whole recording for changes, streaming.
+    # Only the per-frame series are kept; the magnitude spectrogram never exists
+    # in full. An hour at 192 kHz would need ~11 GB as one array and ~170 MB as
+    # per-frame series, and detection only ever needed the flux.
+    print("  Scanning for changes (streaming)...")
+    spectral_result = stream_features(wav_path, config.spectral,
+                                      progress=duration_s > 120)
 
     print("  Detecting events...")
     events = detect_events(spectral_result["flux"], spectral_result["frame_times"],
                            duration_s, config.detector)
     print(f"  Found {len(events)} events")
+
+    print("  Estimating whole-recording indices...")
+    file_indices = sampled_file_indices(wav_path, config)
 
     print("  Classifying events...")
     pairs, classifications = classify_all(events, spectral_result,
@@ -234,6 +305,11 @@ def process_single_file(wav_path: str, config: Config) -> dict:
         selected = select_events(pairs, config.clip)
         if len(selected) != len(pairs):
             print(f"  Clip filter kept {len(selected)}/{len(pairs)} events")
+        if config.clip.fixed_duration_s > 0:
+            before = len(selected)
+            selected = apply_fixed_windows(selected, duration_s, config.clip)
+            print(f"  Fixed {config.clip.fixed_duration_s:g}s windows: "
+                  f"{len(selected)}/{before} kept after overlap suppression")
 
     reels: dict[str, str] = {}
     if not config.json_only and selected:
@@ -242,6 +318,9 @@ def process_single_file(wav_path: str, config: Config) -> dict:
                                    config.clip)
         for (_, data), clip_path in zip(selected, clip_paths):
             data["clip_path"] = clip_path
+
+        print("  Measuring clips...")
+        analyse_clips(clip_paths, selected, config)
 
         render_video = config.clip.make_video and not config.no_video
         wants_media = render_video or config.clip.make_poster or config.clip.make_gif

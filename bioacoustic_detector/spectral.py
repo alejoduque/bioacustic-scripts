@@ -6,6 +6,7 @@ spectral flatness (Wiener entropy), and band energies for 6 ecological bands.
 """
 
 import numpy as np
+import soundfile as sf
 from scipy.signal import find_peaks, get_window, resample_poly
 from math import gcd
 
@@ -332,6 +333,114 @@ def compute_freq_axis(frame_size: int, sr: int) -> np.ndarray:
     """Compute frequency values for each FFT bin."""
     n_fft = frame_size // 2 + 1
     return np.linspace(0, sr / 2, n_fft)
+
+
+def stream_features(path: str, config: SpectralConfig | None = None,
+                    block_frames: int = 4096,
+                    progress: bool = False) -> dict:
+    """
+    Per-frame spectral features for a whole recording, without ever holding the
+    magnitude spectrogram in memory.
+
+    Returns the same per-frame series as analyze() — flux, centroid, flatness,
+    band_energies, frame_times — but NOT `magnitude`, which is the entire point.
+    A 60-minute 192 kHz recording analysed at native rate produces 2.7 M frames;
+    keeping every FFT bin costs ~11 GB, while the per-frame series cost ~170 MB.
+    Detection only ever needed the flux.
+
+    Per-event work that genuinely needs FFT bins — acoustic indices, within-band
+    features — is done afterwards on the extracted clip, where the window is a
+    minute rather than an hour. See pipeline.process_single_file.
+    """
+    config = config or SpectralConfig()
+    info = sf.info(path)
+    src_sr = info.samplerate
+    target = config.target_sr
+    resampling = bool(target) and src_sr > target
+    out_sr = target if resampling else src_sr
+
+    up = down = 1
+    if resampling:
+        g = gcd(src_sr, out_sr)
+        up, down = out_sr // g, src_sr // g
+
+    N, H = config.frame_size, config.hop_size
+    freqs = compute_freq_axis(N, out_sr)
+    nyquist = out_sr / 2.0
+    band_masks = {
+        name: ((freqs >= lo) & (freqs < min(hi, nyquist))) if lo < nyquist
+        else np.zeros(len(freqs), dtype=bool)
+        for name, (lo, hi) in config.bands.items()
+    }
+
+    # Block sizing in OUTPUT samples, converted back to input samples to read.
+    out_block = block_frames * H + (N - H)
+    in_block = int(round(out_block * down / up))
+    in_overlap = int(round((N - H) * down / up))
+    # Extra input padding on each side so polyphase edge transients are trimmed
+    pad_in = 4 * down if resampling else 0
+
+    flux_parts, cen_parts, flat_parts = [], [], []
+    band_parts: dict[str, list] = {name: [] for name in config.bands}
+    prev_mag_row: np.ndarray | None = None
+    n_blocks = 0
+
+    for block in sf.blocks(path, blocksize=in_block + 2 * pad_in,
+                           overlap=in_overlap + 2 * pad_in,
+                           dtype="float64", always_2d=True):
+        chunk = block.mean(axis=1)
+        if resampling:
+            chunk = resample_poly(chunk, up, down)
+            trim = int(round(pad_in * up / down))
+            if trim:
+                chunk = chunk[trim:len(chunk) - trim] if len(chunk) > 2 * trim else chunk
+        if len(chunk) < N:
+            continue
+
+        S = stft(chunk, N, H, config.window)
+        mag = np.abs(S)
+
+        # Flux needs the previous block's last frame to avoid a seam
+        if prev_mag_row is not None:
+            diff = np.maximum(np.diff(np.vstack([prev_mag_row, mag]), axis=0), 0)
+        else:
+            diff = np.maximum(np.diff(mag, axis=0), 0)
+        block_flux = np.sqrt(np.sum(diff ** 2, axis=1))
+        if prev_mag_row is None:
+            block_flux = np.concatenate([[0.0], block_flux])
+        prev_mag_row = mag[-1:].copy()
+
+        flux_parts.append(block_flux)
+        cen_parts.append(spectral_centroid(mag, freqs))
+        flat_parts.append(spectral_flatness(mag))
+        for name, mask in band_masks.items():
+            band_parts[name].append(np.sum(mag[:, mask] ** 2, axis=1)
+                                    if mask.any() else np.zeros(mag.shape[0]))
+
+        n_blocks += 1
+        if progress and n_blocks % 20 == 0:
+            done = n_blocks * out_block / out_sr
+            print(f"    scanned {done / 60:.1f} min", end="\r", flush=True)
+
+    if progress:
+        print(" " * 40, end="\r")
+
+    if not flux_parts:
+        raise RuntimeError(f"No analysable audio in {path}")
+
+    flux = np.concatenate(flux_parts)
+    n = len(flux)
+    return {
+        "flux": flux,
+        "centroid": np.concatenate(cen_parts)[:n],
+        "flatness": np.concatenate(flat_parts)[:n],
+        "band_energies": {k: np.concatenate(v)[:n] for k, v in band_parts.items()},
+        "freqs": freqs,
+        "sr": out_sr,
+        "hop_size": H,
+        "frame_times": np.arange(n) * H / out_sr,
+        "streamed": True,
+    }
 
 
 def analyze(audio: np.ndarray, sr: int,
