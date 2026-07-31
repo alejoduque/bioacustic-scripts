@@ -686,6 +686,96 @@ Those are the patterns the indices are designed to quantify, and the reason both
 
 ---
 
+## Features and rules: the calibration tension
+
+The toolkit carries two parallel descriptions of every event, and they do not
+yet talk to each other.
+
+**Rules** assign the ecological role. They are auditable, need no training
+data, and encode real ecological knowledge — a dawn chorus *is* mid-frequency
+activity at dawn. But they are hand-tuned, and validation has now broken them
+twice: a low-frequency anuran chorus reads as `geophony` because 0–2 kHz is
+defined as weather, and a sustained katydid band read as `bat_echolocation`
+because 16–40 kHz was defined as bats.
+
+**Features** measure the signal. `band_crest`, `band_entropy`, `periodicity`
+and `pulse_rate_hz` are arithmetic, not judgement. But a number is not an
+ecological category, and nothing yet maps one onto the other.
+
+### What that costs, in one frame
+
+A pond at 21:00, La Luna, station AU-MAM-10. The caption reads
+`nocturnal voice [probable 65%]`. The column, on the same frame, reports:
+
+```
+band       biophony high        entropy   0.951
+crest      1.4                  pulse     11.8 Hz
+```
+
+An entropy of 0.951 means the energy is spread almost evenly across the band;
+a crest of 1.4 means there is no peak worth the name. Together they say
+*broadband noise*. The rule nevertheless returned "probable" at 65 %, because
+it consulted only the hour and the dominant band — the two measurements that
+contradict its premise were computed, printed beside it, and ignored.
+
+Nothing here is broken. The rule did what it was written to do and the
+features measured what they were written to measure. They simply never meet.
+
+### The tension
+
+The obvious response is to tune thresholds until the output looks right. That
+is the one move to avoid. Output tuned until it matches intuition is fitted to
+intuition, and it will look right by construction — the fit is unfalsifiable
+because there is no independent standard it could fail against.
+
+This project has already demonstrated the sharper version of that trap. The
+synthetic test corpus was written by the same hand as the rules, so the
+fixtures encoded the same assumptions the code did and agreed with it. Twice:
+synthetic "amphibians" were generated at 2.6–3.1 kHz because the band table
+assumes anurans live there, and synthetic "rain" was given a Hann envelope
+that made it score as the most periodic thing in the corpus. Both times the
+tests passed and the belief was wrong.
+
+The discipline that follows: **thresholds move only against data somebody else
+annotated.** Until then the claims are marked rather than sharpened.
+
+### How to balance the two — in order of cost
+
+**1. Make confidence earned rather than assigned.** Today each rule branch
+returns a constant its author chose. It could instead start from that constant
+and be adjusted by how many independent measurements agree with the rule's
+premise. `nocturnal_voice` claims a *voice*; a voice is spectrally
+concentrated; crest 1.4 and entropy 0.951 contradict that, so the confidence
+should fall rather than sit at 0.65. This costs no training data, keeps every
+rule auditable, and turns `confidence` from a fiction into something with
+content.
+
+**2. Let features veto, not just weigh.** Where a measurement directly refutes
+a rule's premise, demote the event to `candidate` or `unclassified` instead of
+emitting the role at face value. The bat/katydid fix already does this with
+duration; the same shape generalises to crest, entropy and periodicity.
+
+**3. Abstain loudly.** When no rule's premise survives its features, say
+`unclassified` and surface the feature vector. That clip is not a failure — it
+is the one an annotator should see first.
+
+**4. Rank clips for annotation by disagreement.** The most informative clip to
+label is the one where rule and features disagree most. Sorting the gallery
+that way turns the existing output into an annotation queue, and it is active
+learning without a model.
+
+**5. Only then, learn the mapping.** With a few hundred verified events, fit
+the thresholds — or replace the rules with a classifier over the feature
+vector, keeping the rules as the interpretable baseline it has to beat. Step 4
+is what makes step 5 affordable.
+
+Steps 1–4 need no annotations and would make the current output more honest
+immediately. They are deliberately *not* implemented yet: each one changes what
+the labels mean, and that is a decision for the person whose thesis rests on
+them.
+
+---
+
 ## Using this as a dataset (machine learning)
 
 The pipeline is a **weak-labelling and segmentation front end**, not a classifier to be trusted as ground truth. Read this section before training anything on its output.

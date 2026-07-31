@@ -689,6 +689,99 @@ Esos son los patrones que los índices están diseñados para cuantificar, y la 
 
 ---
 
+## Rasgos y reglas: la tensión de la calibración
+
+La herramienta lleva dos descripciones paralelas de cada evento, y todavía no
+se hablan entre sí.
+
+**Las reglas** asignan el rol ecológico. Son auditables, no requieren datos de
+entrenamiento y codifican conocimiento ecológico real: un coro del amanecer
+*es* actividad de frecuencia media al amanecer. Pero están ajustadas a mano, y
+la validación ya las ha roto dos veces: un coro de anuros graves se lee como
+`geophony` porque 0–2 kHz está definido como clima, y una banda sostenida de
+esperanzas se leyó como `bat_echolocation` porque 16–40 kHz se definió como
+murciélagos.
+
+**Los rasgos** miden la señal. `band_crest`, `band_entropy`, `periodicity` y
+`pulse_rate_hz` son aritmética, no juicio. Pero un número no es una categoría
+ecológica, y nada mapea todavía lo uno sobre lo otro.
+
+### Lo que eso cuesta, en un solo cuadro
+
+Un cuerpo de agua a las 21:00, La Luna, estación AU-MAM-10. La leyenda dice
+`nocturnal voice [probable 65%]`. La columna, en el mismo cuadro, reporta:
+
+```
+band       biophony high        entropy   0.951
+crest      1.4                  pulse     11.8 Hz
+```
+
+Una entropía de 0.951 significa que la energía se reparte casi por igual en la
+banda; una cresta de 1.4 significa que no hay pico digno de ese nombre. Juntas
+dicen *ruido de banda ancha*. La regla devolvió aun así "probable" al 65 %,
+porque consultó solo la hora y la banda dominante: las dos mediciones que
+contradicen su premisa se calcularon, se imprimieron al lado y se ignoraron.
+
+Nada está roto aquí. La regla hizo lo que se escribió que hiciera y los rasgos
+midieron lo que se escribió que midieran. Simplemente nunca se encuentran.
+
+### La tensión
+
+La respuesta obvia es ajustar umbrales hasta que la salida se vea bien. Ese es
+justamente el movimiento a evitar. Una salida ajustada hasta coincidir con la
+intuición está ajustada *a la intuición*, y se verá bien por construcción: el
+ajuste es infalsable porque no hay un estándar independiente contra el cual
+pudiera fallar.
+
+Este proyecto ya demostró la versión más aguda de esa trampa. El corpus
+sintético de prueba lo escribió la misma mano que las reglas, así que el
+material codificaba los mismos supuestos que el código y le daba la razón. Dos
+veces: los "anfibios" sintéticos se generaron entre 2.6 y 3.1 kHz porque la
+tabla de bandas supone que ahí viven los anuros, y a la "lluvia" sintética se
+le dio una envolvente de Hann que la volvió lo más periódico del corpus. Las
+dos veces las pruebas pasaron y la creencia era falsa.
+
+La disciplina que se desprende: **los umbrales se mueven solo contra datos que
+haya anotado otra persona.** Hasta entonces las afirmaciones se marcan, no se
+afinan.
+
+### Cómo equilibrar ambos — en orden de costo
+
+**1. Que la confianza se gane en vez de asignarse.** Hoy cada rama de regla
+devuelve una constante que su autor eligió. Podría en cambio partir de esa
+constante y ajustarse según cuántas mediciones independientes concuerden con la
+premisa de la regla. `nocturnal_voice` afirma una *voz*; una voz está
+espectralmente concentrada; una cresta de 1.4 y una entropía de 0.951 lo
+contradicen, así que la confianza debería bajar en lugar de quedarse en 0.65.
+Esto no cuesta datos de entrenamiento, mantiene auditable cada regla y
+convierte `confidence` de una ficción en algo con contenido.
+
+**2. Que los rasgos puedan vetar, no solo pesar.** Donde una medición refute
+directamente la premisa de una regla, degradar el evento a `candidate` o
+`unclassified` en lugar de emitir el rol tal cual. La corrección de
+murciélago/esperanza ya hace esto con la duración; la misma forma se generaliza
+a cresta, entropía y periodicidad.
+
+**3. Abstenerse en voz alta.** Cuando ninguna premisa sobrevive a sus rasgos,
+decir `unclassified` y mostrar el vector de rasgos. Ese clip no es un fracaso:
+es el primero que debería ver quien anota.
+
+**4. Ordenar los clips para anotación por desacuerdo.** El clip más informativo
+para etiquetar es aquel donde regla y rasgos más discrepan. Ordenar la galería
+así convierte la salida actual en una cola de anotación, y es aprendizaje activo
+sin modelo.
+
+**5. Solo entonces, aprender el mapeo.** Con unos cientos de eventos
+verificados, ajustar los umbrales — o reemplazar las reglas por un clasificador
+sobre el vector de rasgos, conservando las reglas como la línea base
+interpretable que hay que superar. El paso 4 es lo que hace asequible el paso 5.
+
+Los pasos 1–4 no requieren anotaciones y harían la salida actual más honesta de
+inmediato. Están deliberadamente *sin* implementar: cada uno cambia lo que
+significan las etiquetas, y esa es una decisión de quien apoya su tesis en ellas.
+
+---
+
 ## Usar esto como conjunto de datos (aprendizaje automático)
 
 El pipeline es un **front end de etiquetado débil y segmentación**, no un clasificador en el que se pueda confiar como verdad de referencia. Lea esta sección antes de entrenar cualquier cosa con su salida.
