@@ -561,6 +561,8 @@ $$\Phi(t) > \mathrm{median}_{W}(\Phi) + \kappa \cdot 1.4826 \cdot \mathrm{MAD}_{
 
 where *W* is a **60-second causal window** (look-back only, so detection could run live), κ is `--threshold` (default 2.5), and 1.4826 is the constant that makes the MAD a consistent estimator of the standard deviation for normally distributed data.
 
+*W* is capped at **half the recording length**. AudioMoth duty cycles routinely write 60-second files, and a 60-second window over a 60-second file makes the baseline a global constant that cannot adapt at all. On a La Luna dusk recording that put the threshold at 165 against a maximum flux of 143, and the detector returned zero events on an audibly busy chorus.
+
 Median and MAD rather than mean and σ because a robust baseline is the whole point: a single loud event must not raise the bar that judges the events around it. The MAD's breakdown point is 50 % — half the window can be outliers before the estimate moves.
 
 1. Compute the running median and MAD of Φ over the causal window

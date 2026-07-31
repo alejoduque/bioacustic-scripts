@@ -563,6 +563,8 @@ $$\Phi(t) > \mathrm{median}_{W}(\Phi) + \kappa \cdot 1.4826 \cdot \mathrm{MAD}_{
 
 donde *W* es una **ventana causal de 60 segundos** (solo mira hacia atrás, de modo que la detección podría correr en vivo), κ es `--threshold` (2.5 por defecto), y 1.4826 es la constante que vuelve a la MAD un estimador consistente de la desviación estándar para datos normalmente distribuidos.
 
+*W* se limita a **la mitad de la duración de la grabación**. Los ciclos de trabajo de AudioMoth escriben habitualmente archivos de 60 segundos, y una ventana de 60 segundos sobre un archivo de 60 segundos convierte la línea base en una constante global incapaz de adaptarse. En una grabación de atardecer de La Luna eso puso el umbral en 165 frente a un flujo máximo de 143, y el detector devolvió cero eventos sobre un coro audiblemente activo.
+
 Mediana y MAD en lugar de media y σ porque una línea base robusta es justamente el punto: un único evento fuerte no debe elevar la vara que juzga a los eventos vecinos. El punto de ruptura de la MAD es del 50 %: la mitad de la ventana puede ser atípica antes de que la estimación se mueva.
 
 1. Calcular la mediana y la MAD móviles de Φ sobre la ventana causal

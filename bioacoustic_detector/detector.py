@@ -112,7 +112,17 @@ def detect_events(flux: np.ndarray, frame_times: np.ndarray,
     else:
         return []
 
+    # A causal baseline needs the recording to be materially longer than the
+    # window, or every frame sees the same statistics and the threshold stops
+    # adapting. AudioMoth duty cycles routinely write 60-second files, against
+    # a 60-second default window: on a La Luna recording that made the
+    # threshold a global constant of 165 against a maximum flux of 143, and the
+    # detector returned zero events on audible dusk chorus. Cap the window at
+    # half the recording so at least two window-lengths exist.
     window_frames = max(1, int(config.baseline_window_s / dt))
+    max_window = max(1, int(len(flux) / 2))
+    if window_frames > max_window:
+        window_frames = max_window
 
     # Adaptive threshold
     median, mad = running_median_mad(flux, window_frames)
