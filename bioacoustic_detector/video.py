@@ -160,7 +160,6 @@ def metadata_block(event: dict, recording_meta: dict) -> str:
             ("elevation", f"{event['elevation_m']:.0f} m"
              if event.get("elevation_m") is not None else ""),
             ("cover", recording_meta.get("habitat")),
-            ("CORINE", event.get("corine_code")),
             ("season", recording_meta.get("season")),
         ]),
         ("RECORDER", [
@@ -175,7 +174,7 @@ def metadata_block(event: dict, recording_meta: dict) -> str:
         ("EVENT", [
             ("onset", f"{event.get('onset_s', 0):.2f} s"),
             ("length", f"{event.get('duration_s', 0):.2f} s"),
-            ("band", str(event.get("dominant_band", "")).replace("_", " ")),
+
             ("centroid", f"{event.get('centroid', 0) / 1000:.2f} kHz"),
             ("in-band", f"{event.get('band_centroid', 0) / 1000:.2f} kHz"
              if event.get("band_centroid") else ""),
@@ -196,15 +195,43 @@ def metadata_block(event: dict, recording_meta: dict) -> str:
         ]),
     ]
 
+    # Each contributing band on its own line. A pond at night runs three bands
+    # at once, and squeezing them onto one line simply ran off the column.
+    shares = event.get("band_shares") or {}
+    if shares:
+        # Pre-formatted into the key so the share is not squeezed against the
+        # band name by the label column's fixed 10-character pad.
+        band_rows = [(f"  {name.replace('_', ' '):<17}{share:>3.0%}", "")
+                     for name, share in shares.items()]
+        for name, rows in groups:
+            if name == "EVENT":
+                rows[2:2] = [("bands", "")] + band_rows
+                break
+
+    # drawtext will not wrap, so anything longer than the column gets cut off
+    # mid-word — as "…ciénagas naturales" did. Fold instead.
+    width = 30
     lines = []
     for heading, rows in groups:
-        present = [(k, str(v)) for k, v in rows if v not in (None, "", "None")]
+        # An empty value normally means "nothing measured", so the row is
+        # dropped. Rows already formatted whole — the per-band shares, and the
+        # heading above them — are indented and kept.
+        present = [(k, str(v)) for k, v in rows
+                   if v not in (None, "", "None") or k.startswith("  ")
+                   or k == "bands"]
         if not present:
             continue
         if lines:
             lines.append("")
         lines.append(heading)
-        lines += [f"{k:<10}{v}" for k, v in present]
+        for key, value in present:
+            row = f"{key:<10}{value}" if value else key
+            while len(row) > width:
+                cut = row.rfind(" ", 0, width)
+                cut = cut if cut > 10 else width
+                lines.append(row[:cut])
+                row = " " * 10 + row[cut:].lstrip()
+            lines.append(row)
     return "\n".join(lines)
 
 
@@ -221,7 +248,6 @@ def render_clip_video(clip_path: str, output_path: str, event: dict,
     config = config or VideoConfig()
 
     domain = event.get("domain", "")
-    role = event.get("role", "event").replace("_", " ")
     confidence = event.get("confidence", 0.0)
     certainty = event.get("certainty") or certainty_of(confidence)
 
@@ -234,7 +260,12 @@ def render_clip_video(clip_path: str, output_path: str, event: dict,
     qualifier = {"probable": "probable",
                  "candidate": "candidate",
                  "unclassified": "unverified"}.get(certainty, certainty)
-    inferred = f"{role}  [{qualifier} {confidence:.0%}]"
+    # Every voice the event carries, not only the loudest. An event whose
+    # energy splits 44/31/24 across three bands is a soundscape, and naming it
+    # after the plurality is what made a pond full of frogs read as insects.
+    names = event.get("roles") or [event.get("role", "event")]
+    inferred = " + ".join(n.replace("_", " ") for n in names)
+    inferred += f"  [{qualifier} {confidence:.0%}]"
 
     rec_dt = recording_meta.get("datetime")
     date_text = rec_dt.strftime("%d %B %Y %H:%M") if rec_dt else ""

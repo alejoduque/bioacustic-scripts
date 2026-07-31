@@ -85,6 +85,16 @@ RAIN_MIN_DURATION_S = 30.0
 WIND_MIN_DURATION_S = 10.0
 COMMUNITY_SHIFT_BANDS = 3      # active bands needed to call it a community shift
 COMMUNITY_SHIFT_DOMINANCE = 0.4  # ...and no single band may exceed this share
+
+# A band carrying at least this share of the event's energy gets a voice of its
+# own. Measured on a La Luna pond at 21:00, a single event ran biophony_high
+# 44%, biophony_mid 31%, ultrasonic_low 24%: three simultaneous sources, none
+# dominant. Naming that event after its 44% plurality discards the other 56%,
+# and a listener who can hear both frogs and insects is simply right that the
+# label was wrong. 0.15 admits the three real contributors on that corpus while
+# excluding bands sitting at 1-3%, which is noise floor.
+MULTI_LABEL_MIN_SHARE = 0.15
+MAX_LABELS = 3                   # beyond three the name stops being readable
 BAT_PASS_MAX_DURATION_S = 5.0     # above this, ultrasonic energy is not a pass
 INSECT_CHORUS_MIN_DURATION_S = 10.0  # sustained ultrasonic = stridulating insects
 
@@ -211,6 +221,74 @@ def classify_event(onset_s: float, offset_s: float,
         dominant_band=dominant_band,
         reasoning=reasoning,
     )
+
+
+def classify_soundscape(onset_s: float, offset_s: float,
+                        centroid: float, flatness: float, peak_flux: float,
+                        band_energies: dict[str, float],
+                        recording_datetime: datetime | None = None,
+                        prev_event_flux: float | None = None,
+                        config: SpectralConfig | None = None,
+                        band_features: dict | None = None,
+                        min_share: float = MULTI_LABEL_MIN_SHARE
+                        ) -> list[Classification]:
+    """
+    Name every voice in an event, not just the loudest.
+
+    A tropical pond at night is anurans low, orthopterans high and bats above
+    that, all at once. Taking the argmax over band energies picks one and
+    silently drops the rest, which is how an event a human hears as "frogs and
+    insects" ends up filed as `insect_chorus`.
+
+    Each band holding at least `min_share` of the event's energy is classified
+    on its own terms, and the results are returned strongest first. The first
+    element is the primary role, so callers that want a single answer still get
+    the same one as before.
+
+    Transitions are the exception: a jump in flux is a property of the event as
+    a whole rather than of any band, so when the transition rules fire they
+    return a single label.
+    """
+    config = config or SpectralConfig()
+    total = sum(band_energies.values())
+    hour = recording_datetime.hour if recording_datetime else 12
+    duration = offset_s - onset_s
+
+    ranked = sorted(band_energies.items(), key=lambda kv: -kv[1])
+    if not ranked or total <= 0:
+        return [Classification("community_shift", DOMAIN_TRANSITION, 0.2,
+                               "unknown", "No band energy")]
+
+    # Event-level rules first: a transition belongs to the event, not a band.
+    if prev_event_flux is not None:
+        ratio = peak_flux / max(prev_event_flux, 1e-10)
+        if ratio > TRANSITION_RISE or ratio < TRANSITION_FALL:
+            role, conf, why = _classify_features(
+                hour, duration, centroid, flatness, peak_flux,
+                ranked[0][0], ranked[0][1] / total, band_energies,
+                prev_event_flux, band_features or {})
+            return [Classification(role, ROLES[role], conf, ranked[0][0], why)]
+
+    out: list[Classification] = []
+    seen: set[str] = set()
+    for band, energy in ranked[:MAX_LABELS]:
+        share = energy / total
+        if out and share < min_share:
+            break
+        role, conf, why = _classify_features(
+            hour, duration, centroid, flatness, peak_flux,
+            band, share, band_energies, None, band_features or {})
+        if role in seen:
+            continue
+        seen.add(role)
+        out.append(Classification(
+            role=role, domain=ROLES[role],
+            confidence=round(conf * (0.6 + 0.4 * share), 3),
+            dominant_band=band,
+            reasoning=f"{why} [{share:.0%} of event energy]"))
+
+    return out or [Classification("community_shift", DOMAIN_TRANSITION, 0.2,
+                                  ranked[0][0], "No band above threshold")]
 
 
 def _classify_features(hour: int, duration: float,

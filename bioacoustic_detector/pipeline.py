@@ -31,7 +31,8 @@ import numpy as np
 import soundfile as sf
 
 from . import store
-from .classifier import Classification, classify_event, parliament_summary
+from .classifier import (Classification, classify_soundscape,
+                         parliament_summary)
 from .clipper import extract_clips, select_events
 from .config import Config, VideoConfig
 from .detector import Event, detect_events
@@ -131,7 +132,7 @@ def classify_all(events: list[Event], spectral_result: dict,
             for name, series in spectral_result["band_energies"].items()
         }
 
-        classification = classify_event(
+        voices = classify_soundscape(
             event.onset_s, event.offset_s,
             event_centroid, event_flatness, event.peak_flux,
             event_bands,
@@ -139,8 +140,19 @@ def classify_all(events: list[Event], spectral_result: dict,
             prev_event_flux=prev_flux,
             config=config.spectral,
         )
+        classification = voices[0]
         classifications.append(classification)
         prev_flux = event.peak_flux
+
+        # Which bands actually carried the event, as measured shares. This is
+        # the honest answer to "is it frogs or insects?" — it names the
+        # frequencies that were speaking without claiming a species for them.
+        total_energy = sum(event_bands.values()) or 1.0
+        mix = [(name, energy / total_energy)
+               for name, energy in sorted(event_bands.items(),
+                                          key=lambda kv: -kv[1])
+               if energy / total_energy >= 0.10]
+        band_mix = "  ".join(f"{n.replace('_', ' ')} {s:.0%}" for n, s in mix)
 
         pairs.append((event, {
             **site_fields,
@@ -160,6 +172,10 @@ def classify_all(events: list[Event], spectral_result: dict,
             "confidence": round(classification.confidence, 3),
             "certainty": classification.certainty,
             "dominant_band": classification.dominant_band,
+            "roles": [v.role for v in voices],
+            "domains": sorted({v.domain for v in voices}),
+            "band_mix": band_mix,
+            "band_shares": {n: round(s, 4) for n, s in mix},
             "band_lo_hz": config.spectral.bands.get(
                 classification.dominant_band, (0, 0))[0],
             "band_hi_hz": config.spectral.bands.get(

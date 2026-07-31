@@ -170,9 +170,12 @@ class VideoConfig:
     # Text overlays
     overlay_text: bool = True
     font_file: str = ""          # auto-detected when empty
-    header_font_size: int = 24
-    date_font_size: int = 20
-    label_font_size: int = 20
+    # Kept close together on purpose. At 24px against a 13px column the same
+    # face reads as a different, brighter one: a 1-pixel outline is
+    # proportionally much thinner on large glyphs, so the stroke looks bolder.
+    header_font_size: int = 16
+    date_font_size: int = 15
+    label_font_size: int = 16
     column_font_size: int = 13
     column_line_spacing: int = 3
 

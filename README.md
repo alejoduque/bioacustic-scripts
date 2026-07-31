@@ -176,7 +176,17 @@ Coordinates come from the survey's GIS layer, not the recorder: `sites.py` reads
 
 The plot itself starts at **200 Hz** rather than 0 — below that a field recording carries rumble, wind on the case and DC drift, and on a log axis that dead range ate a third of the height. It is also bracketed around the event's own band (three octaves down, two up), so the picture concentrates on what was detected. `--no-focus` restores the full range, `--min-freq` moves the floor.
 
-**Left — inferred**, tagged with how far the claim goes:
+**Left — inferred.** Every voice the event carries, joined with `+`, then how far the claim goes:
+
+```
+nocturnal voice + bat echolocation  [candidate 50%]
+```
+
+An event is not obliged to have one author. On a La Luna pond at 21:00 a single event ran **biophony_high 44 %, biophony_mid 31 %, ultrasonic_low 24 %** — three simultaneous sources, none dominant. Taking the argmax over band energies names it after the 44 % plurality and silently discards the other 56 %, which is how a pond a listener hears as frogs *and* insects gets filed as `insect_chorus`. Any band holding at least 15 % of the event's energy is now classified on its own terms, and the column lists the measured share of each.
+
+That share list is the honest answer to "what is making this sound?": it names the frequencies that were speaking without claiming a species for them. Note that energy is not loudness — human hearing is far more sensitive around 1–4 kHz than at 15 kHz, so a chorus that *sounds* dominant may not be the largest number in the list.
+
+The tags:
 
 | Tag | Means |
 |---|---|

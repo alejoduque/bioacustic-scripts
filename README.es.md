@@ -176,7 +176,17 @@ Las coordenadas provienen de la capa SIG del muestreo, no del grabador: `sites.p
 
 El gráfico arranca en **200 Hz** y no en 0: por debajo de eso una grabación de campo lleva retumbe, viento sobre la carcasa y deriva de DC, y en un eje logarítmico ese rango muerto se comía un tercio de la altura. Además se encuadra alrededor de la banda propia del evento (tres octavas abajo, dos arriba). `--no-focus` restaura el rango completo; `--min-freq` mueve el piso.
 
-**Izquierda — inferido**, etiquetado según hasta dónde llega la afirmación:
+**Izquierda — inferido.** Cada voz que lleva el evento, unidas con `+`, y luego hasta dónde llega la afirmación:
+
+```
+nocturnal voice + bat echolocation  [candidate 50%]
+```
+
+Un evento no está obligado a tener un solo autor. En un cuerpo de agua de La Luna a las 21:00, un solo evento repartió **biophony_high 44 %, biophony_mid 31 %, ultrasonic_low 24 %**: tres fuentes simultáneas, ninguna dominante. Tomar el argmax sobre las energías por banda lo nombra según la mayoría del 44 % y descarta en silencio el 56 % restante, que es como un charco que alguien oye como ranas *e* insectos termina archivado como `insect_chorus`. Ahora cada banda que concentre al menos el 15 % de la energía del evento se clasifica por derecho propio, y la columna lista la proporción medida de cada una.
+
+Esa lista de proporciones es la respuesta honesta a "¿qué está sonando?": nombra las frecuencias que hablaban sin atribuirles una especie. Nótese que energía no es sonoridad — el oído humano es mucho más sensible entre 1 y 4 kHz que a 15 kHz, así que un coro que *suena* dominante puede no ser el número más grande de la lista.
+
+Las etiquetas:
 
 | Etiqueta | Significa |
 |---|---|

@@ -33,8 +33,12 @@ _FFMPEG_CANDIDATES = (
 # loaded here; a monospace face is the closest available match and keeps the
 # overlays from reading as a different typographic voice.
 _FONT_CANDIDATES = (
-    "/System/Library/Fonts/Menlo.ttc",
+    # Single-face .ttf first. A .ttc is a collection, and drawtext picks a face
+    # from it by index, so the same file can render at a different weight than
+    # intended — which is why the header read brighter than the column.
     "/System/Library/Fonts/Monaco.ttf",
+    "/System/Library/Fonts/Supplemental/Andale Mono.ttf",
+    "/System/Library/Fonts/Menlo.ttc",
     "/System/Library/Fonts/Supplemental/Andale Mono.ttf",
     "/System/Library/Fonts/Supplemental/Courier New.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
