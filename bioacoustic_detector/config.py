@@ -160,10 +160,14 @@ class VideoConfig:
     slide: str = "scroll"
     legend: str = "enable"
 
-    # Visual identity per acoustic domain (ffmpeg showspectrum colormaps)
+    # Visual identity per acoustic domain (ffmpeg showspectrum colormaps).
+    # biophony was "green" — a single-hue map with almost no perceptual
+    # contrast in the low-energy half of the frame, which read as an out of
+    # focus blur. "plasma" runs purple -> orange -> yellow, so a hue shift is
+    # visible well before a pixel goes fully dark.
     style_by_domain: bool = True
     domain_colors: dict = field(default_factory=lambda: {
-        "biophony": "green",
+        "biophony": "plasma",
         "geophony": "cool",
         "anthrophony": "fiery",
         "transition": "magma",

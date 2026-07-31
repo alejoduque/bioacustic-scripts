@@ -1,6 +1,6 @@
 # Field calibration protocol
 
-**English** · [Español](CALIBRACION.md) · [← README](../README.md)
+**English** · [Español](CALIBRACION.md) · [← README](../README.en.md)
 
 Everything in this toolkit has so far been verified on **synthetic audio** written to exercise specific code paths. That proves the pipeline does what it claims mechanically. It says nothing about whether the ecological thresholds are right for any real site.
 

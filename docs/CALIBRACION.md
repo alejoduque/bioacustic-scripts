@@ -1,6 +1,6 @@
 # Protocolo de calibración en campo
 
-[English](CALIBRATION.md) · **Español** · [← README](../README.es.md)
+[English](CALIBRATION.md) · **Español** · [← README](../README.md)
 
 Todo lo que hay en este conjunto de herramientas se ha verificado hasta ahora con **audio sintético**, escrito para ejercitar rutas de código específicas. Eso demuestra que el pipeline hace mecánicamente lo que dice hacer. No dice nada sobre si los umbrales ecológicos son correctos para un sitio real.
 

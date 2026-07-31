@@ -1,19 +1,19 @@
 # Bioacoustic Scripts
 
-**English** · [Español](README.es.md)
+**Español** · [English](README.en.md)
 
-A toolkit for turning AudioMoth field recordings into **phenological data that can be driven over OSC**.
+Un conjunto de herramientas para convertir grabaciones de campo de AudioMoth en **datos fenológicos que puedan gobernarse por OSC**.
 
-It listens for moments when the soundscape changes — a species starting up, rain arriving, the dawn chorus turning over — cuts a short video clip of each one, classifies it by ecological role, and accumulates those events into a dated calendar that an instrument can follow: Eurorack, ILDA laser, SuperCollider, anything that speaks OSC.
+Escucha los momentos en que el paisaje sonoro cambia — una especie que arranca, la lluvia que llega, el coro del amanecer que se releva —, recorta un video corto de cada uno, lo clasifica por rol ecológico y acumula esos eventos en un calendario fechado que un instrumento puede seguir: Eurorack, láser ILDA, SuperCollider, cualquier cosa que hable OSC.
 
-**Live gallery:** https://etc.altred.xyz/staticbioacustics/index.html
-**Field calibration protocol:** [docs/CALIBRATION.md](docs/CALIBRATION.md) — what to do when the real recordings arrive
+**Galería en vivo:** https://etc.altred.xyz/staticbioacustics/index.html
+**Protocolo de calibración en campo:** [docs/CALIBRACION.md](docs/CALIBRACION.md) — qué hacer cuando lleguen las grabaciones reales
 
 ---
 
-## How to run
+## Cómo ejecutarlo
 
-### First time
+### La primera vez
 
 ```bash
 git clone git@github.com:alejoduque/bioacustic-scripts.git
@@ -22,39 +22,39 @@ chmod +x bioacoustics.sh detect_events.sh
 ./bioacoustics.sh
 ```
 
-That's the whole setup. On first launch the script finds a Python 3.10+ interpreter, creates a virtualenv at `~/.bioacoustic_detector_venv`, and installs `numpy`, `scipy`, `soundfile`, `metamoth` and `python-osc` into it. Takes a minute or two once; every later run starts immediately. Nothing is installed system-wide and nothing else needs configuring.
+Esa es toda la instalación. En el primer arranque el script busca un intérprete de Python 3.10+, crea un entorno virtual en `~/.bioacoustic_detector_venv` e instala allí `numpy`, `scipy`, `soundfile`, `metamoth` y `python-osc`. Toma un par de minutos una sola vez; las corridas siguientes arrancan de inmediato. No se instala nada a nivel de sistema y no hay nada más que configurar.
 
-Two things worth knowing before you start:
+Dos cosas que conviene saber antes de empezar:
 
-- **ffmpeg is optional but recommended.** Without it you still get clips, `events.json`, OSC exports, the calendar and the reports — but no spectrogram video, stills or GIFs. `brew install ffmpeg` (macOS) or `sudo apt install ffmpeg` (Debian/Ubuntu).
-- **Recording filenames matter for phenology.** The AudioMoth `YYYYMMDD_HHMMSS.WAV` format is how the toolkit knows when each recording was made. Files named otherwise still produce events and clips, but they cannot be placed on a calendar.
+- **ffmpeg es opcional pero recomendable.** Sin él igual se obtienen clips, `events.json`, exportaciones OSC, el calendario y los reportes; lo que no se obtiene es video de espectrograma, imágenes fijas ni GIFs. `brew install ffmpeg` (macOS) o `sudo apt install ffmpeg` (Debian/Ubuntu).
+- **Los nombres de archivo importan para la fenología.** El formato AudioMoth `YYYYMMDD_HHMMSS.WAV` es la vía por la que la herramienta sabe cuándo se hizo cada grabación. Archivos con otro nombre igual producen eventos y clips, pero no pueden ubicarse en un calendario.
 
-Check your environment at any time:
+Revisar el entorno en cualquier momento:
 
 ```bash
 ./bioacoustics.sh doctor
 ```
 
-### The guided way
+### La vía guiada
 
 ```bash
 ./bioacoustics.sh
 ```
 
-One entry point, one menu:
+Un solo punto de entrada, un solo menú:
 
 ```
- 1  Detect events and cut video clips      the core pipeline — start here
- 2  Phenological calendar                  dated ecological series + OSC exports
- 3  OSC                                    stream, serve or export for instruments
- 4  Event clip gallery                     browse the clips by event type
- 5  AudioMoth metadata report              headers, temperature, battery
- 6  Media utilities                        whole-file spectrogram, GIF, split
- 7  HDR photo batch (DJI DNG)              bracketed stills from the same surveys
- 8  Environment check                      what is installed
+ 1  Detectar eventos y recortar clips        el pipeline principal — empiece aquí
+ 2  Calendario fenológico                    series ecológicas fechadas + OSC
+ 3  OSC                                      transmitir, servir o exportar
+ 4  Galería de clips por evento              recorrer los clips por tipo
+ 5  Reporte de metadatos AudioMoth           cabeceras, temperatura, batería
+ 6  Utilidades de medios                     espectrograma completo, GIF, partir
+ 7  Lote HDR de fotos (DJI DNG)              fijas horquilladas del mismo muestreo
+ 8  Revisión del entorno                     qué está instalado
 ```
 
-Each option explains what it does, then asks only what it cannot infer — where your recordings are, how sensitive detection should be, which kinds of event you want clips of, whether to render video. Defaults are shown in brackets, so Enter accepts them. Before anything runs you get a plan to confirm:
+Cada opción explica qué hace y luego pregunta solo lo que no puede inferir: dónde están las grabaciones, qué tan sensible debe ser la detección, de qué tipos de evento se quieren clips, si se renderiza video. Los valores por defecto aparecen entre corchetes, así que Enter los acepta. Antes de ejecutar cualquier cosa se muestra un plan para confirmar:
 
 ```
 Plan
@@ -70,99 +70,99 @@ Plan
 Run this? (Y/n)
 ```
 
-Answers persist to `~/.bioacoustics_wizard.json`, so the second session is mostly pressing Enter. Typing `q` inside a flow returns to the menu; `q` at the menu quits. Nothing is destructive — every flow writes into an output folder you choose.
+Las respuestas se guardan en `~/.bioacoustics_wizard.json`, de modo que la segunda sesión es sobre todo presionar Enter. Escribir `q` dentro de un flujo devuelve al menú; `q` en el menú termina. Nada es destructivo: cada flujo escribe en una carpeta de salida que usted elige.
 
-### The direct way
+### La vía directa
 
-Every feature is also a subcommand, for scripting and repeat runs:
+Cada función es también un subcomando, para automatizar y repetir:
 
 ```bash
-# Analyse a folder: event clips, videos, OSC, calendar, gallery
-./detect_events.sh recordings/ --phenology
+# Analizar una carpeta: clips, videos, OSC, calendario, galería
+./detect_events.sh grabaciones/ --phenology
 
-# Same thing spelled out
-./bioacoustics.sh detect recordings/ --phenology -o ./results
+# Lo mismo, explícito
+./bioacoustics.sh detect grabaciones/ --phenology -o ./resultados
 
-# One recording, more sensitive, no video
-./detect_events.sh recordings/20250315_053000.WAV --sensitivity subtle --no-video
+# Una grabación, más sensible, sin video
+./detect_events.sh grabaciones/20250315_053000.WAV --sensitivity subtle --no-video
 
-# Only rain and wind, with GIF previews
-./detect_events.sh recordings/ --domains geophony --gif
+# Solo lluvia y viento, con vistas previas en GIF
+./detect_events.sh grabaciones/ --domains geophony --gif
 
-# Stream the calendar to an instrument, one day per second, on repeat
-./bioacoustics.sh osc phenology ./results --loop
+# Transmitir el calendario a un instrumento, un día por segundo, en bucle
+./bioacoustics.sh osc phenology ./resultados --loop
 
-# Let the instrument query instead: answers /phenology/query/*
-./bioacoustics.sh osc serve ./results --listen-port 57121
+# Que el instrumento pregunte en vez de recibir empujones: responde /phenology/query/*
+./bioacoustics.sh osc serve ./resultados --listen-port 57121
 
-# Rebuild outputs without re-analysing the audio
-./bioacoustics.sh phenology ./results
-./bioacoustics.sh gallery ./results
+# Reconstruir salidas sin volver a analizar el audio
+./bioacoustics.sh phenology ./resultados
+./bioacoustics.sh gallery ./resultados
 ```
 
-Help for any subcommand:
+Ayuda de cualquier subcomando:
 
 ```bash
 ./bioacoustics.sh --help
 ./bioacoustics.sh detect --help
 ```
 
-A path as the first argument is shorthand for `detect`, so `./detect_events.sh rec.WAV --threshold 1.5` works as it always did.
+Una ruta como primer argumento equivale a `detect`, de modo que `./detect_events.sh rec.WAV --threshold 1.5` sigue funcionando como siempre.
 
-### Four typical workflows
+### Cuatro flujos de trabajo típicos
 
-**Survey a single card of recordings.** Detection is the expensive step; everything else reads its output.
+**Revisar una tarjeta de grabaciones.** La detección es el paso costoso; todo lo demás lee su salida.
 
 ```bash
 ./detect_events.sh /Volumes/AUDIOMOTH/ -o ./luna_marzo --phenology
-open ./luna_marzo/gallery.html          # browse the clips by event type
-open ./luna_marzo/summary_report.html   # the batch at a glance
+open ./luna_marzo/gallery.html          # recorrer los clips por tipo de evento
+open ./luna_marzo/summary_report.html   # el lote de un vistazo
 ```
 
-**Tune sensitivity before committing to a long run.** `--json-only` reports what would be detected without writing clips or rendering video — the same analysis, a fraction of the time and disk once ffmpeg is in play. (In one test of 11 × 100 s recordings: 80 KB of JSON instead of 155 MB of media.)
+**Ajustar la sensibilidad antes de comprometerse a una corrida larga.** `--json-only` reporta qué se detectaría sin escribir clips ni renderizar video: el mismo análisis, una fracción del tiempo y del disco cuando ffmpeg entra en juego. (En una prueba de 11 × 100 s: 80 KB de JSON en lugar de 155 MB de medios.)
 
 ```bash
-./detect_events.sh recordings/ --sensitivity salient --json-only -o /tmp/probe
-./detect_events.sh recordings/ --sensitivity subtle  --json-only -o /tmp/probe2
-# compare the event counts, then re-run for real with the setting you liked
+./detect_events.sh grabaciones/ --sensitivity salient --json-only -o /tmp/probe
+./detect_events.sh grabaciones/ --sensitivity subtle  --json-only -o /tmp/probe2
+# comparar el conteo de eventos y volver a correr en serio con lo que convenza
 ```
 
-Spectral analysis is the fixed cost and runs either way, so the saving is in the rendering, not the listening.
+El análisis espectral es el costo fijo y corre de todas maneras, así que el ahorro está en el renderizado, no en la escucha.
 
-**Follow a season phenologically.** Point it at everything you have; the calendar needs recordings from at least two days.
+**Seguir una temporada fenológicamente.** Apúntelo a todo lo que tenga; el calendario necesita grabaciones de al menos dos días.
 
 ```bash
-./detect_events.sh "Epoca lluvias/" -o ./season --phenology --days-per-second 2
-open ./season/phenological_calendar.html
-column -s, -t ./season/phenological_series.csv | less -S
+./detect_events.sh "Epoca lluvias/" -o ./temporada --phenology --days-per-second 2
+open ./temporada/phenological_calendar.html
+column -s, -t ./temporada/phenological_series.csv | less -S
 ```
 
-**Drive an installation.** Analyse once, then stream or serve as often as you like.
+**Alimentar una instalación.** Analizar una vez y luego transmitir o servir cuantas veces se quiera.
 
 ```bash
-./detect_events.sh season/ -o ./season --phenology
-cat ./season/osc_address_map.txt                      # what you'll receive
-./bioacoustics.sh osc phenology ./season --loop --host 192.168.1.40 --port 57120
+./detect_events.sh temporada/ -o ./temporada --phenology
+cat ./temporada/osc_address_map.txt                   # lo que va a recibir
+./bioacoustics.sh osc phenology ./temporada --loop --host 192.168.1.40 --port 57120
 ```
 
 ---
 
-## Reading a spectrogram clip
+## Cómo leer un clip de espectrograma
 
-Every rendered clip encodes four independent channels of information. Nothing is decorative.
+Cada clip renderizado codifica cuatro canales de información independientes. Nada es decorativo.
 
-| Channel | Carries | Set by |
+| Canal | Transporta | Definido por |
 |---|---|---|
-| **Vertical axis** | frequency — which part of the spectrum the sound occupies | `--max-freq`, or Nyquist in ultrasonic mode |
-| **Horizontal axis** | time within the clip, scrolling right to left | clip length = event + pre/post-roll |
-| **Brightness** | energy in dBFS over a 72 dB range, log-scaled | `dynamic_range`, `gain_scale` |
-| **Hue** | the acoustic **domain** the classifier assigned | `domain_colors` in `config.py` |
+| **Eje vertical** | frecuencia — qué parte del espectro ocupa el sonido | `--max-freq`, o Nyquist en modo ultrasónico |
+| **Eje horizontal** | tiempo dentro del clip, desplazándose de derecha a izquierda | duración del clip = evento + margen previo/posterior |
+| **Brillo** | energía en dBFS sobre un rango de 72 dB, escala logarítmica | `dynamic_range`, `gain_scale` |
+| **Matiz (color)** | el **dominio acústico** que asignó el clasificador | `domain_colors` en `config.py` |
 
-Text is white with a 1-pixel black outline and no filled box, so it stays legible over any colormap without hiding the spectrogram beneath it — and so that colour in the frame means exactly one thing: the acoustic domain.
+El texto es blanco con un contorno negro de 1 píxel y sin caja de fondo, para que se lea sobre cualquier mapa de color sin tapar el espectrograma que hay debajo — y para que el color en el cuadro signifique exactamente una cosa: el dominio acústico.
 
-### The caption separates measurement from inference
+### La leyenda separa medición de inferencia
 
-The bottom row carries two different kinds of claim, on opposite sides, so they are never read as one statement:
+La fila inferior lleva dos tipos distintos de afirmación, en lados opuestos, para que nunca se lean como una sola:
 
 ```
 unclassified                    geophony  15.2 kHz  0.3s  NDSI -0.58  ACI 235
@@ -170,117 +170,121 @@ candidate: insect chorus (40%)  ultrasonic mid  27.7 kHz  5.8s  13 Hz pulse  NDS
 probable: dawn chorus participant (80%)   biophony mid  5.4 kHz  5.0s  NDSI +1.00  ACI 446
 ```
 
-**Right — measured.** A metadata column padded onto the frame carries everything known about the clip, in four groups: **SITE** (station id, locality, latitude, longitude, elevation, land cover, season), **RECORDER** (device id, date, time, temperature, sample rate, battery), **EVENT** (onset, length, band shares, centroid, in-band centroid, crest, entropy, pulse rate) and **INDICES** (ACI, BIO, NDSI, ADI, AEI). All of it measured or surveyed.
+**Derecha — medido.** Una columna de metadatos añadida al cuadro lleva todo lo que se sabe del clip, en cuatro grupos: **SITE** (estación, vereda, latitud, longitud, elevación, cobertura, época), **RECORDER** (dispositivo, fecha, hora, temperatura, frecuencia de muestreo, batería), **EVENT** (inicio, duración, reparto de bandas, centroide, centroide en banda, cresta, entropía, tasa de pulso) e **INDICES** (ACI, BIO, NDSI, ADI, AEI). Todo medido o levantado en campo.
 
-Coordinates come from the survey's GIS layer, not the recorder: `sites.py` reads a KML of sampling points and matches each recording to its station by land cover and date. Without such a layer those lines are simply absent.
+Las coordenadas provienen de la capa SIG del muestreo, no del grabador: `sites.py` lee un KML de puntos y empareja cada grabación con su estación por cobertura y fecha. Sin esa capa, esas líneas simplemente no aparecen.
 
-The plot itself starts at **200 Hz** rather than 0 — below that a field recording carries rumble, wind on the case and DC drift, and on a log axis that dead range ate a third of the height. It is also bracketed around every band the event actually carried (union of all bands holding ≥10% of its energy — see the multi-label mix below), widened by a small octave margin (one down, half up) for a little breathing room. Bracketing around only the single dominant band, with generous margins to compensate, used to leave a wide dead stretch of low frequencies with nothing in it; the union already spans the activity, so the margin doesn't need to manufacture context. `--no-focus` restores the full range, `--min-freq` moves the floor.
+El gráfico arranca en **200 Hz** y no en 0: por debajo de eso una grabación de campo lleva retumbe, viento sobre la carcasa y deriva de DC, y en un eje logarítmico ese rango muerto se comía un tercio de la altura. Además se encuadra alrededor de todas las bandas que el evento realmente llevó (unión de las bandas con ≥10% de su energía — ver el reparto multi-etiqueta más abajo), ensanchado con un pequeño margen de octava (una abajo, media arriba) para dar algo de aire. Antes se encuadraba solo alrededor de la banda dominante, con márgenes generosos para compensar, y eso dejaba un tramo muerto de frecuencias bajas sin nada; la unión ya cubre la actividad, así que el margen no necesita fabricar contexto. `--no-focus` restaura el rango completo; `--min-freq` mueve el piso.
 
-**Left — inferred.** Every voice the event carries, joined with `+`, then how far the claim goes:
+El color de la biofonía cambió de `green` a `plasma` (púrpura → naranja → amarillo): un mapa monocromático como `green` casi no tiene contraste perceptual en la mitad baja de energía, así que esa parte del cuadro se veía plana, como fuera de foco. Con `plasma` un cambio de energía se ve como un cambio de matiz mucho antes de que el píxel llegue a negro total. Se controla por dominio en `VideoConfig.domain_colors` (colormaps de `showspectrum` de ffmpeg).
+
+**Izquierda — inferido.** Cada voz que lleva el evento, unidas con `+`, y luego hasta dónde llega la afirmación:
 
 ```
 nocturnal voice + bat echolocation  [candidate 50%]
 ```
 
-An event is not obliged to have one author. On a La Luna pond at 21:00 a single event ran **biophony_high 44 %, biophony_mid 31 %, ultrasonic_low 24 %** — three simultaneous sources, none dominant. Taking the argmax over band energies names it after the 44 % plurality and silently discards the other 56 %, which is how a pond a listener hears as frogs *and* insects gets filed as `insect_chorus`. Any band holding at least 15 % of the event's energy is now classified on its own terms, and the column lists the measured share of each.
+Un evento no está obligado a tener un solo autor. En un cuerpo de agua de La Luna a las 21:00, un solo evento repartió **biophony_high 44 %, biophony_mid 31 %, ultrasonic_low 24 %**: tres fuentes simultáneas, ninguna dominante. Tomar el argmax sobre las energías por banda lo nombra según la mayoría del 44 % y descarta en silencio el 56 % restante, que es como un charco que alguien oye como ranas *e* insectos termina archivado como `insect_chorus`. Ahora cada banda que concentre al menos el 15 % de la energía del evento se clasifica por derecho propio, y la columna lista la proporción medida de cada una.
 
-That share list is the honest answer to "what is making this sound?": it names the frequencies that were speaking without claiming a species for them. Note that energy is not loudness — human hearing is far more sensitive around 1–4 kHz than at 15 kHz, so a chorus that *sounds* dominant may not be the largest number in the list.
+Esa lista de proporciones es la respuesta honesta a "¿qué está sonando?": nombra las frecuencias que hablaban sin atribuirles una especie. Nótese que energía no es sonoridad — el oído humano es mucho más sensible entre 1 y 4 kHz que a 15 kHz, así que un coro que *suena* dominante puede no ser el número más grande de la lista.
 
-The tags:
+Las etiquetas:
 
-| Tag | Means |
+| Etiqueta | Significa |
 |---|---|
-| `probable` | a specific rule matched on several features (confidence ≥ 0.6) |
-| `candidate` | a rule matched but is known to over-claim — `bat_echolocation` sits here, because the same band carries katydids |
-| `unclassified` | no rule matched; the event fell through to the fallback branch and the label means nothing more than that |
+| `probable` | una regla específica coincidió en varios rasgos (confianza ≥ 0.6) |
+| `candidate` | una regla coincidió, pero se sabe que sobre-afirma — `bat_echolocation` está aquí, porque la misma banda lleva esperanzas |
+| `unclassified` | ninguna regla coincidió; el evento cayó a la rama de respaldo y la etiqueta no significa más que eso |
 
-This exists because validation established that `role` is a hypothesis from uncalibrated thresholds while `dominant_band` is a measurement. Printing `Community Shift (20%)` gave the fallback branch the appearance of a finding; it now prints `unclassified`. The tier travels with the event as a `certainty` field in `events.json` and as a badge on every gallery card.
+Esto existe porque la validación estableció que `role` es una hipótesis de umbrales sin calibrar mientras que `dominant_band` es una medición. Imprimir `Community Shift (20%)` le daba a la rama de respaldo apariencia de hallazgo; ahora imprime `unclassified`. El nivel viaja con el evento como campo `certainty` en `events.json` y como distintivo en cada tarjeta de la galería.
 
-### Why colour maps to domain
+### Por qué el color corresponde al dominio
 
-A colormap is a categorical signal, and there is only one categorical decision worth spending it on. Frequency is already the vertical axis; amplitude is already brightness. What neither axis shows is **what kind of participant** made the sound — and that is the entire point of the classification.
+Un mapa de color es una señal categórica, y solo hay una decisión categórica en la que valga la pena gastarlo. La frecuencia ya es el eje vertical; la amplitud ya es el brillo. Lo que ningún eje muestra es **qué tipo de participante** produjo el sonido, y eso es justamente el propósito de la clasificación.
 
-So the colormap answers "who is speaking?" at a glance, before you read a single label:
+Así, el mapa de color responde "¿quién habla?" de un vistazo, antes de leer una sola etiqueta:
 
-| Domain | Colormap | Reads as | What lives here |
+| Dominio | Mapa de color | Se lee como | Qué vive ahí |
 |---|---|---|---|
-| **biophony** | `green` | living, vegetal | birds, frogs, insects, bats — anything alive |
-| **geophony** | `cool` (blue/teal) | water, air, cold | rain, wind, thunder, flowing water |
-| **anthrophony** | `fiery` (orange/red) | intrusion, alarm | engines, aircraft, machinery |
-| **transition** | `magma` (pink/purple) | a boundary, not a voice | the soundscape changing state |
+| **biofonía** | `green` | vivo, vegetal | aves, anuros, insectos, murciélagos — todo lo vivo |
+| **geofonía** | `cool` (azul/verdeazulado) | agua, aire, frío | lluvia, viento, truenos, agua corriente |
+| **antrofonía** | `fiery` (naranja/rojo) | intrusión, alarma | motores, aviones, maquinaria |
+| **transición** | `magma` (rosa/violeta) | un borde, no una voz | el paisaje sonoro cambiando de estado |
 
-Scrubbing a folder of clips, an assemblage reads as a colour distribution: a green night is a biophonically active one, a blue night was rained out, orange means a road or a pump was audible. That property is what makes the gallery scannable across hundreds of events, and it is why the domain — not the role — gets the colour. Sixteen roles would need sixteen colormaps that nobody could distinguish; four domains are separable at a glance.
+Al recorrer una carpeta de clips, un ensamblaje se lee como una distribución de color: una noche verde es una noche biofónicamente activa, una noche azul se la llevó la lluvia, el naranja indica que se oía una vía o una bomba. Esa propiedad es lo que hace la galería recorrible a lo largo de cientos de eventos, y es la razón por la que el color corresponde al dominio y no al rol. Dieciséis roles exigirían dieciséis mapas de color que nadie podría distinguir; cuatro dominios se separan de un vistazo.
 
-Transitions get `magma` deliberately. They are not a voice at all — they mark the *seam* where one acoustic community gives way to another. Giving them a hue that belongs to neither the living green nor the elemental blue keeps that distinction visible.
+Las transiciones reciben `magma` deliberadamente. No son una voz: marcan la *costura* donde una comunidad acústica cede el lugar a otra. Darles un matiz que no pertenece ni al verde vivo ni al azul elemental mantiene visible esa distinción.
 
-### The chain from FFT to colour
+### La cadena que va de la FFT al color
 
-Colour is the last link in a chain that starts with the raw samples. Each step is a decision made from the step before it, and nothing in it is a species identification:
+El color es el último eslabón de una cadena que empieza en las muestras crudas. Cada paso es una decisión tomada a partir del anterior, y nada en ella es una identificación de especie:
 
 ```
-samples
-  → STFT magnitude |X(t,f)|            frame_size 2048, hop 512, Hann
-  → spectral flux  Φ(t)                half-wave rectified L2 of successive frames
-  → adaptive threshold                 median + 2.5 × 1.4826 × MAD, 60 s causal window
-  → event onset/offset                 contiguous frames above threshold, merged, filtered
-  → per-event features                 band energies, centroid, flatness, duration, indices
-  → ecological ROLE                    rule-based, 16 categories        (the caption)
-  → acoustic DOMAIN                    role → {biophony, geophony, anthrophony, transition}
-  → COLORMAP                           domain → {green, cool, fiery, magma}
+muestras
+  → magnitud STFT |X(t,f)|            frame_size 2048, hop 512, Hann
+  → flujo espectral Φ(t)              norma L2 rectificada de media onda entre marcos
+  → umbral adaptativo                 mediana + 2.5 × 1.4826 × MAD, ventana causal 60 s
+  → inicio/fin del evento             marcos contiguos sobre el umbral, fusionados y filtrados
+  → rasgos por evento                 energías por banda, centroide, planitud, duración, índices
+  → ROL ecológico                     basado en reglas, 16 categorías      (la leyenda)
+  → DOMINIO acústico                  rol → {biofonía, geofonía, antrofonía, transición}
+  → MAPA DE COLOR                     dominio → {green, cool, fiery, magma}
 ```
 
-The **role** is the finest judgement the system makes, and the label prints it with a confidence (`Dawn Chorus Participant (80%) | biophony mid`). The **domain** is the coarse, robust rollup — a rain event misfiled as wind is still geophony, still blue. Colour is therefore more trustworthy than the caption above it, which is exactly why colour carries the at-a-glance meaning and the caption carries the detail.
+El **rol** es el juicio más fino que hace el sistema, y la leyenda lo imprime con una confianza (`Dawn Chorus Participant (80%) | biophony mid`). El **dominio** es la agregación gruesa y robusta: una lluvia mal archivada como viento sigue siendo geofonía, sigue siendo azul. Por lo tanto el color es más confiable que la leyenda que lo acompaña, y esa es exactamente la razón por la que el color lleva el significado de un vistazo y la leyenda lleva el detalle.
 
-### Two worked examples
+### Dos ejemplos trabajados
 
-These are real frames from the verification corpus, and each one is internally consistent — you can check the classification against the picture and the numbers against both.
+Son cuadros reales del corpus de verificación, y cada uno es internamente consistente: se puede contrastar la clasificación contra la imagen y los números contra ambas.
 
-**A dawn chorus participant, rendered green.**
+**Un participante del coro del amanecer, en verde.**
 
-Two chirps sweep 4.7 → 6.7 kHz against near-silence. The energy sits squarely in `biophony_mid` (4–8 kHz, the passerine band); the recording timestamp is 05:30, inside the 04:00–07:00 dawn window; the sweeps are tonal, so flatness is low. Rules fire in that order and produce `dawn_chorus_participant` at 0.80 confidence, domain biophony, colormap green. The caption reads `Dawn Chorus Participant (80%) | biophony mid`, and `NDSI +1.00` confirms it: essentially all energy is in the 2–8 kHz biophonic band and none in the 1–2 kHz anthropogenic one.
+Dos barridos recorren de 4.7 a 6.7 kHz sobre un fondo casi silencioso. La energía cae de lleno en `biophony_mid` (4–8 kHz, la banda de los paseriformes); la marca temporal de la grabación es 05:30, dentro de la ventana del amanecer de 04:00–07:00; los barridos son tonales, así que la planitud es baja. Las reglas se disparan en ese orden y producen `dawn_chorus_participant` con confianza 0.80, dominio biofonía, mapa de color verde. La leyenda dice `Dawn Chorus Participant (80%) | biophony mid`, y `NDSI +1.00` lo confirma: prácticamente toda la energía está en la banda biofónica de 2–8 kHz y nada en la banda antropogénica de 1–2 kHz.
 
-**A rain shower, rendered magma — and why it is not labelled `rain_event`.**
+**Un aguacero, en magma — y por qué no se etiqueta `rain_event`.**
 
-A solid block of noise fills everything below ~1.9 kHz for the whole clip, with nothing above it. `dominant_band` is `geophony` (0–2 kHz) and `NDSI −0.99` agrees: essentially all energy sits in the low band the index treats as non-biophonic. The picture and the arithmetic match perfectly.
+Un bloque sólido de ruido llena todo por debajo de ~1.9 kHz durante todo el clip, sin nada por encima. `dominant_band` es `geophony` (0–2 kHz) y `NDSI −0.99` concuerda: esencialmente toda la energía está en la banda baja que el índice considera no biofónica. La imagen y la aritmética coinciden perfectamente.
 
-The label, however, reads `Silence To Activity (70%) | geophony`, and the clip renders in transition magma rather than geophony blue. Two rules combine to produce that:
+La etiqueta, sin embargo, dice `Silence To Activity (70%) | geophony`, y el clip se renderiza en magma de transición y no en azul de geofonía. Dos reglas se combinan para producir eso:
 
-1. **Transition rules take precedence over content rules.** When an event's peak flux is more than 5× the previous event's, it is filed as `silence_to_activity` whatever is making the sound. A rain onset is exactly such a jump. This is deliberate — the seam between acoustic regimes is ecologically interesting — but it means the first event of any new regime is usually a transition.
-2. **The `rain_event` rule did not fire even for the later, non-jumping events.** It requires `flatness > 0.30`; the measured flatness of those blocks was **0.21 and 0.29**.
+1. **Las reglas de transición tienen prioridad sobre las de contenido.** Cuando el flujo pico de un evento supera en más de 5× al del evento anterior, se archiva como `silence_to_activity` sin importar qué produzca el sonido. El inicio de un aguacero es exactamente ese salto. Es deliberado —la costura entre regímenes acústicos es ecológicamente interesante—, pero implica que el primer evento de cualquier régimen nuevo suele ser una transición.
+2. **La regla de `rain_event` tampoco se disparó en los eventos posteriores, que ya no eran un salto.** Requiere `flatness > 0.30`; la planitud medida de esos bloques fue de **0.21 y 0.29**.
 
-The second point is a calibration gap worth knowing before trusting labels in bulk, and it comes from a property of the features rather than a coding error:
+El segundo punto es una brecha de calibración que conviene conocer antes de confiar en las etiquetas de forma masiva, y proviene de una propiedad de los rasgos y no de un error de código:
 
-- **Spectral flatness is computed over the whole spectrum.** A signal that is perfectly noise-like *within its own band* still scores low when it occupies only part of the range. The measure answers "is this recording noisy?", not "is this event noisy?".
-- **Spectral centroid is magnitude-weighted over the whole spectrum**, so a wide low-level noise floor drags it upward. Those same rain events reported centroids of **6.5 and 7.7 kHz** despite having no energy at all above 2 kHz — which is why the anthrophony rule (`centroid < 1500`) missed them too.
+- **La planitud espectral se calcula sobre todo el espectro.** Una señal perfectamente ruidosa *dentro de su propia banda* obtiene un valor bajo si ocupa solo una parte del rango. La medida responde a "¿es ruidosa esta grabación?", no a "¿es ruidoso este evento?".
+- **El centroide espectral se pondera por magnitud sobre todo el espectro**, de modo que un piso de ruido amplio y de bajo nivel lo arrastra hacia arriba. Esos mismos eventos de lluvia reportaron centroides de **6.5 y 7.7 kHz** pese a no tener energía alguna por encima de 2 kHz, razón por la cual la regla de antrofonía (`centroid < 1500`) tampoco los capturó.
 
-In the 45-event verification corpus, `rain_event`, `wind_event`, `water_flow`, `mechanical_intrusion` and `aircraft_passage` were therefore **never emitted**. Geophonic content was real, visible and correctly measured — it simply fell through to the transition and fallback rules.
+En el corpus de verificación de 45 eventos, `rain_event`, `wind_event`, `water_flow`, `mechanical_intrusion` y `aircraft_passage` **nunca se emitieron**. El contenido geofónico era real, visible y estaba correctamente medido: simplemente cayó a las reglas de transición y de respaldo.
 
-The thresholds live at the top of `classifier.py` as named constants (`GEOPHONY_FLATNESS`, `ANTHROPHONY_CENTROID_HZ`, …) precisely so they can be recalibrated against annotated field recordings. **Until that calibration happens on real tropical dry forest data, treat `dominant_band` and the numeric features as the trustworthy signal and `role` as a hypothesis.** For the same reason, domain colour is more reliable than the caption above it.
+Los umbrales viven al inicio de `classifier.py` como constantes con nombre (`GEOPHONY_FLATNESS`, `ANTHROPHONY_CENTROID_HZ`, …) precisamente para poder recalibrarlos contra grabaciones de campo anotadas. **Mientras esa calibración no ocurra sobre datos reales de bosque seco tropical, trate `dominant_band` y los rasgos numéricos como la señal confiable, y `role` como una hipótesis.** Por la misma razón, el color del dominio es más confiable que la leyenda que lo acompaña.
+
+Ver [docs/CALIBRACION.md](docs/CALIBRACION.md) para el protocolo completo.
 
 ---
 
-## Ultrasound: bats, Nyquist, and what gets thrown away
+## Ultrasonido: murciélagos, Nyquist y lo que se descarta
 
-AudioMoth records at 8, 16, 32, 48, 96, 192, 250, 256 or 384 kHz. Anything above 48 kHz is a deliberate choice to record bats, and it changes what the toolkit has to do.
+El AudioMoth graba a 8, 16, 32, 48, 96, 192, 250, 256 o 384 kHz. Cualquier cosa por encima de 48 kHz es una decisión deliberada de grabar murciélagos, y eso cambia lo que la herramienta debe hacer.
 
-### The hard limit
+### El límite duro
 
-Sampling at rate *fs* can represent frequencies only up to **Nyquist = fs/2**. Above that, content does not vanish — it **aliases**, folding down to `|fs − f|` and appearing at a frequency that was never there:
+Muestrear a una frecuencia *fs* permite representar frecuencias solo hasta **Nyquist = fs/2**. Por encima de eso el contenido no desaparece: hace **aliasing**, se pliega a `|fs − f|` y aparece en una frecuencia que nunca estuvo presente:
 
-| AudioMoth rate | Nyquist | Reaches | Misses |
+| Frecuencia AudioMoth | Nyquist | Alcanza | No alcanza |
 |---|---|---|---|
-| 48 kHz | 24 kHz | birds, frogs, insects, the lowest bats | most echolocation |
-| 96 kHz | 48 kHz | Molossidae, some Vespertilionidae | high Phyllostomidae |
-| 192 kHz | 96 kHz | nearly all neotropical echolocation | the highest CF species |
-| 256 / 384 kHz | 128 / 192 kHz | everything | — |
+| 48 kHz | 24 kHz | aves, anuros, insectos, los murciélagos más graves | casi toda la ecolocación |
+| 96 kHz | 48 kHz | Molossidae, algunos Vespertilionidae | Phyllostomidae agudos |
+| 192 kHz | 96 kHz | casi toda la ecolocación neotropical | las especies CF más agudas |
+| 256 / 384 kHz | 128 / 192 kHz | todo | — |
 
-This is not hypothetical. While building the test corpus a synthetic 105 kHz caller was written into a 192 kHz file; it appeared at 87 kHz (`|192 − 105|`) and was classified from that aliased frequency. A real species above Nyquist produces exactly the same artefact, and nothing downstream can tell the difference. **Choose the recorder's sample rate from the assemblage you expect, and treat energy near the top of the plot with suspicion.**
+No es hipotético. Al construir el corpus de prueba se escribió un emisor sintético de 105 kHz en un archivo de 192 kHz; apareció en 87 kHz (`|192 − 105|`) y fue clasificado a partir de esa frecuencia. Una especie real por encima de Nyquist produce exactamente el mismo artefacto, y nada aguas abajo puede notar la diferencia. **Elija la frecuencia de muestreo según el ensamblaje que espera, y desconfíe de la energía pegada al borde superior del gráfico.**
 
-### Why the default discards ultrasound
+### Por qué el modo por defecto descarta el ultrasonido
 
-By default the detector downsamples to 48 kHz before analysis. That is the right choice for a bird-and-frog survey — it bounds cost and matches the STFT resolution to bird syllables — but the anti-alias filter removes everything above 24 kHz **permanently for that analysis**. Bats become invisible; they do not appear as weak events, they do not appear at all.
+Por defecto el detector submuestrea a 48 kHz antes de analizar. Es la decisión correcta para un muestreo de aves y anuros —acota el costo y ajusta la resolución de la STFT a las sílabas de las aves— pero el filtro antialias elimina todo lo que está por encima de 24 kHz **de forma permanente para ese análisis**. Los murciélagos se vuelven invisibles: no aparecen como eventos débiles, no aparecen en absoluto.
 
-Rather than fail silently, a recording sampled above 2× the analysis rate triggers a warning:
+En lugar de fallar en silencio, una grabación muestreada por encima del doble de la frecuencia de análisis dispara una advertencia:
 
 ```
 ! This recording carries content up to 96 kHz, but analysis downsamples to 48 kHz.
@@ -288,90 +292,90 @@ Rather than fail silently, a recording sampled above 2× the analysis rate trigg
   Re-run with --ultrasonic to analyse at the native rate.
 ```
 
-### What `--ultrasonic` changes
+### Qué cambia `--ultrasonic`
 
 ```bash
-./detect_events.sh recordings/ --ultrasonic
+./detect_events.sh grabaciones/ --ultrasonic
 ```
 
-Four things move together, because changing any one alone leaves bats unusable:
+Cuatro cosas se mueven juntas, porque cambiar una sola deja a los murciélagos inutilizables:
 
-| | Default | `--ultrasonic` | Why |
+| | Por defecto | `--ultrasonic` | Por qué |
 |---|---|---|---|
-| Analysis rate | 48 kHz | native (192 kHz…) | anything above Nyquist/2 is otherwise filtered out |
-| STFT window | 2048 / 512 hop | 1024 / 256 hop | at 192 kHz a 2048 window spans 10.7 ms — longer than an entire call |
-| Band table | 5 bands to 24 kHz | 7 bands to 160 kHz | `ultrasonic` alone cannot separate a Molossid from a Phyllostomid |
-| Event timing | merge 5 s, min 2 s | merge 1 s, min 0.3 s | a pass lasts 1–3 s; the audible defaults fuse a night of foraging into one block |
+| Frecuencia de análisis | 48 kHz | nativa (192 kHz…) | de otro modo se filtra todo lo que supera Nyquist/2 |
+| Ventana STFT | 2048 / salto 512 | 1024 / salto 256 | a 192 kHz una ventana de 2048 abarca 10.7 ms — más que una llamada entera |
+| Tabla de bandas | 5 bandas hasta 24 kHz | 7 bandas hasta 160 kHz | `ultrasonic` a secas no separa un Molossidae de un Phyllostomidae |
+| Tiempos del evento | fusión 5 s, mín. 2 s | fusión 1 s, mín. 0.3 s | un paso dura 1–3 s; los valores audibles funden una noche de forrajeo en un solo bloque |
 
-Explicit `--merge-gap` / `--min-event-duration` flags override the timing defaults.
+Los parámetros explícitos `--merge-gap` / `--min-event-duration` tienen prioridad sobre los valores del modo.
 
-The video also re-frames itself: the axis runs to Nyquist instead of 10 kHz, and switches to a **logarithmic** frequency scale so 0–10 kHz still occupies a readable share of a 0–96 kHz plot instead of being crushed into the bottom 10%.
+El video también se reencuadra: el eje llega hasta Nyquist en vez de 10 kHz y pasa a una escala de frecuencia **logarítmica**, para que 0–10 kHz siga ocupando una porción legible de un gráfico de 0–96 kHz en lugar de quedar aplastado en el 10 % inferior.
 
-### The ultrasonic band table
+### La tabla de bandas ultrasónicas
 
-Splits chosen for neotropical dry-forest assemblages:
+Cortes elegidos para ensamblajes de bosque seco neotropical:
 
-| Band | Range | Typical occupants |
+| Banda | Rango | Ocupantes típicos |
 |---|---|---|
-| `ultrasonic_low` | 16–40 kHz | Molossidae (free-tailed bats), some Vespertilionidae, high katydids |
-| `ultrasonic_mid` | 40–80 kHz | most Vespertilionidae and Phyllostomidae search-phase calls |
-| `ultrasonic_high` | 80–160 kHz | high-frequency Phyllostomidae, terminal feeding buzzes |
+| `ultrasonic_low` | 16–40 kHz | Molossidae, algunos Vespertilionidae, esperanzas (katydids) agudas |
+| `ultrasonic_mid` | 40–80 kHz | la mayoría de llamadas de búsqueda de Vespertilionidae y Phyllostomidae |
+| `ultrasonic_high` | 80–160 kHz | Phyllostomidae de alta frecuencia, zumbidos terminales de alimentación |
 
-An event whose dominant band is any of these classifies as `bat_echolocation` (domain biophony, so it renders green). That rule is checked *before* the diel rules, because a dominant band above 16 kHz is unambiguous — no bird, frog or engine puts its main energy there.
+Un evento cuya banda dominante sea cualquiera de estas se clasifica como `bat_echolocation` (dominio biofonía, por lo que se renderiza en verde). Esa regla se evalúa *antes* que las reglas dieles, porque una banda dominante por encima de 16 kHz es inequívoca: ninguna ave, anuro o motor pone ahí su energía principal.
 
-Verified on a synthetic 192 kHz recording containing four deliberately different sources:
+Verificado sobre una grabación sintética de 192 kHz con cuatro fuentes deliberadamente distintas:
 
-| Synthesized | Detected at | Band | Role |
+| Sintetizado | Detectado en | Banda | Rol |
 |---|---|---|---|
-| 60→25 kHz FM sweeps + feeding buzz | 0.07 s | `ultrasonic_mid` | `insect_chorus` * |
-| 85 kHz CF tone | 10.34 s | `ultrasonic_high` | `bat_echolocation` |
-| 12 kHz katydid band | 14.05 s | `biophony_high` | `insect_chorus` |
-| 30→18 kHz sweeps | 24.00 s | `ultrasonic_low` | `bat_echolocation` |
-| 60→25 kHz second pass | 17.40 s | `ultrasonic_mid` | `bat_echolocation` |
+| Barridos FM 60→25 kHz + zumbido de alimentación | 0.07 s | `ultrasonic_mid` | `insect_chorus` * |
+| Tono CF de 85 kHz | 10.34 s | `ultrasonic_high` | `bat_echolocation` |
+| Banda de esperanza a 12 kHz | 14.05 s | `biophony_high` | `insect_chorus` |
+| Barridos 30→18 kHz | 24.00 s | `ultrasonic_low` | `bat_echolocation` |
+| Segundo paso 60→25 kHz | 17.40 s | `ultrasonic_mid` | `bat_echolocation` |
 
-\* This detection merges the katydid band with the bat sweeps into one 5.8 s
-event, and sustained ultrasonic energy is now read as insect chorus rather than
-echolocation — see the field finding below. The band is right; the role reflects
-the longer of the two things inside the merged event.
+\* Esta detección fusiona la banda de esperanza con los barridos de murciélago en
+un solo evento de 5.8 s, y la energía ultrasónica sostenida ahora se lee como coro
+de insectos y no como ecolocación — ver el hallazgo de campo abajo. La banda es
+correcta; el rol refleja lo más largo de las dos cosas dentro del evento fusionado.
 
-The same file analysed **without** `--ultrasonic` yielded two `insect_chorus` events and no bats at all — the katydids survived downsampling, everything else was filtered away.
+El mismo archivo analizado **sin** `--ultrasonic` arrojó dos eventos `insect_chorus` y ningún murciélago: las esperanzas sobrevivieron al submuestreo, todo lo demás se filtró.
 
-### Cost
+### Costo
 
-Analysing at 192 kHz with a 256-sample hop produces 750 frames per second, eight times the audible default. The adaptive baseline is a running median over a 60-second window, which is O(frames × window) — at that frame rate an hour of tape would take days. It is therefore evaluated at up to 2000 anchor points and linearly interpolated between them, with the first 512 frames always computed exactly (that is the one stretch where the statistic genuinely moves fast, while the window is still filling).
+Analizar a 192 kHz con un salto de 256 muestras produce 750 marcos por segundo, ocho veces el valor audible por defecto. La línea base adaptativa es una mediana móvil sobre una ventana de 60 segundos, que es O(marcos × ventana): a esa tasa, una hora de grabación tomaría días. Por eso se evalúa en hasta 2000 puntos de anclaje y se interpola linealmente entre ellos, calculando siempre de forma exacta los primeros 512 marcos (es el único tramo donde el estadístico se mueve rápido de verdad, mientras la ventana aún se está llenando).
 
-The approximation was checked against the exact computation across the audible corpus: **identical event counts, identical onsets, and two event offsets out of 45 differing by 32 ms and 75 ms** — a threshold crossing on a decaying tail landing one or two frames apart. The speedup is 5.6× at 48 kHz and the difference between usable and unusable at 192 kHz.
+La aproximación se contrastó contra el cálculo exacto en todo el corpus audible: **conteos de eventos idénticos, inicios idénticos y dos finales de evento de 45 que difieren en 32 ms y 75 ms** — un cruce de umbral sobre una cola decreciente que cae uno o dos marcos más allá. La aceleración es de 5.6× a 48 kHz, y a 192 kHz es la diferencia entre utilizable e inutilizable.
 
 ---
 
-## Why events, not recordings
+## Por qué eventos y no grabaciones
 
-Earlier versions rendered one scrolling spectrogram per recording. A twelve-second amphibian assembly inside an hour of tape is invisible that way, and there is nothing to point an instrument at.
+Las versiones anteriores renderizaban un espectrograma por grabación. Un ensamblaje de anuros de doce segundos dentro de una hora de cinta es invisible así, y no hay nada a lo que apuntar un instrumento.
 
-The pipeline now works per event:
-
-```
-audio → spectral features → adaptive-threshold detection → classification
-      → one clip per event (with context) → spectrogram video, still, GIF
-      → one reel per event type → events.json → OSC → report
-```
-
-and then across recordings:
+El pipeline ahora trabaja por evento:
 
 ```
-results → phenological calendar → OSC score / live stream / query server
-        → event gallery → batch summary
+audio → rasgos espectrales → detección por umbral adaptativo → clasificación
+      → un clip por evento (con contexto) → video de espectrograma, fija, GIF
+      → un reel por tipo de evento → events.json → OSC → reporte
 ```
 
-Clips are filed by what they are, so each kind of voice gets its own folder of evidence:
+y luego entre grabaciones:
+
+```
+resultados → calendario fenológico → partitura OSC / transmisión / servidor de consultas
+           → galería de eventos → resumen del lote
+```
+
+Los clips se archivan por lo que son, de modo que cada tipo de voz obtiene su propia carpeta de evidencia:
 
 ```
 detected_events/
   20250315_053000/
-    events.json                     # full metadata: events, classifications, indices
-    events.osc                      # timed OSC bundle for this recording
-    events_score.scd                # SuperCollider score
-    report.html                     # per-recording report
+    events.json                     # metadatos completos: eventos, clasificaciones, índices
+    events.osc                      # paquete OSC temporizado de esta grabación
+    events_score.scd                # partitura SuperCollider
+    report.html                     # reporte por grabación
     clips/
       biophony/dawn_chorus_participant/
         event_003_dawn_chorus_participant_40.8s-45.8s.wav
@@ -381,446 +385,450 @@ detected_events/
       geophony/rain_event/…
       transition/community_shift/…
     reels/
-      reel_dawn_chorus_participant.mp4    # every clip of one type, concatenated
-  phenological_calendar.json        # the calendar, incl. per-day OSC frames
-  phenological_calendar.html        # heatmap, CV series, dawn drift, wavetable
-  phenological_series.csv           # one tidy row per day
-  phenology.osc                     # timed OSC bundle for the whole season
-  phenology_score.scd               # SuperCollider score for the season
-  osc_address_map.txt               # generated address reference
-  gallery.html                      # every clip, grouped by event type
-  summary_report.html               # the batch at a glance
+      reel_dawn_chorus_participant.mp4    # todos los clips de un tipo, concatenados
+  phenological_calendar.json        # el calendario, incl. marcos OSC por día
+  phenological_calendar.html        # mapa de calor, series CV, deriva del amanecer
+  phenological_series.csv           # una fila ordenada por día
+  phenology.osc                     # paquete OSC temporizado de toda la temporada
+  phenology_score.scd               # partitura SuperCollider de la temporada
+  osc_address_map.txt               # referencia de direcciones, generada
+  gallery.html                      # todos los clips, agrupados por tipo de evento
+  summary_report.html               # el lote de un vistazo
 ```
 
-Event videos are colour-coded by acoustic domain — biophony green, geophony cool, anthrophony fiery, transitions magma — and labelled with habitat, date, offset into the recording, ecological role, confidence, dominant band, NDSI and ACI.
+Los videos de evento se codifican por color según el dominio acústico —biofonía verde, geofonía fría, antrofonía ígnea, transiciones magma— y se rotulan con cobertura, fecha, desplazamiento dentro de la grabación, rol ecológico, confianza, banda dominante, NDSI y ACI.
 
 ---
 
-## Phenological data over OSC
+## Datos fenológicos por OSC
 
-This is the point of the toolkit. A season of recordings becomes a control stream.
+Este es el propósito de la herramienta. Una temporada de grabaciones se convierte en un flujo de control.
 
 ```bash
-# Replay 90 days of field recording in 90 seconds
+# Reproducir 90 días de grabación de campo en 90 segundos
 ./bioacoustics.sh osc phenology detected_events/ --days-per-second 1
 
-# Installation mode: repeat until stopped
+# Modo instalación: repetir hasta detener
 ./bioacoustics.sh osc phenology detected_events/ --loop --port 57120
 
-# Let the instrument ask instead of being pushed at
+# Que el instrumento pregunte en vez de recibir empujones
 ./bioacoustics.sh osc serve detected_events/ --listen-port 57121
 ```
 
-**Every scalar is sent twice** — the raw ecological value, then the same value scaled to 0–1 across the dataset — so a patch can take absolute numbers or a control voltage without knowing the season's range:
+**Cada escalar se envía dos veces** —el valor ecológico crudo y luego el mismo valor escalado a 0–1 sobre todo el conjunto—, para que un patch pueda tomar números absolutos o un voltaje de control sin conocer el rango de la temporada:
 
 ```
-/phenology/day              0  "2025-03-10"  69          index, date, day of year
-/phenology/day/activity     5.0   1.0                    events per recording, cv
-/phenology/day/richness     8.0   1.0                    distinct roles, cv
-/phenology/day/biophony     0.75  0.75                   share of events, cv
-/phenology/day/ndsi         0.93  0.96                   soundscape index, cv
-/phenology/day/dawn         330.7 0.70                   dawn chorus onset (min), cv
-/phenology/day/hourly       0 0 0 0 0 6 0 …              24 ints
-/phenology/day/role         "amphibian_assembly" 4 0.20  role, count, share
+/phenology/day              0  "2025-03-10"  69          índice, fecha, día del año
+/phenology/day/activity     5.0   1.0                    eventos por grabación, cv
+/phenology/day/richness     8.0   1.0                    roles distintos, cv
+/phenology/day/biophony     0.75  0.75                   proporción de eventos, cv
+/phenology/day/ndsi         0.93  0.96                   índice de paisaje sonoro, cv
+/phenology/day/dawn         330.7 0.70                   inicio del coro (min), cv
+/phenology/day/hourly       0 0 0 0 0 6 0 …              24 enteros
+/phenology/day/role         "amphibian_assembly" 4 0.20  rol, conteo, proporción
 /phenology/event            "breeding_chorus_onset" "2025-03-14" 73  2.1
-/phenology/diel/table       0.0 0.0 … 0.94 …             24 floats: a diel wavetable
-/phenology/range/<field>    min max                      the normalization used
+/phenology/diel/table       0.0 0.0 … 0.94 …             24 flotantes: tabla de onda diel
+/phenology/range/<campo>    min max                      la normalización empleada
 ```
 
-Normalized fields: `activity`, `richness`, `biophony`, `geophony`, `anthrophony`, `ndsi`, `adi`, `aci`, `dawn`.
+Campos normalizados: `activity`, `richness`, `biophony`, `geophony`, `anthrophony`, `ndsi`, `adi`, `aci`, `dawn`.
 
-The query server answers `/phenology/query/meta`, `/query/day <int>`, `/query/date <str>`, `/query/next`, `/query/prev`, `/query/events` and `/query/reply_port <int>`.
+El servidor de consultas responde a `/phenology/query/meta`, `/query/day <int>`, `/query/date <str>`, `/query/next`, `/query/prev`, `/query/events` y `/query/reply_port <int>`.
 
-Per-event OSC (`/parliament/event/*`) is also emitted, including `/parliament/event/voct` — the spectral centroid pre-converted to V/Oct with 261.63 Hz at 0 V — plus `/ilda/{color,intensity,angle,speed}` for laser control.
+También se emite OSC por evento (`/parliament/event/*`), incluyendo `/parliament/event/voct` —el centroide espectral ya convertido a V/Oct con 261.63 Hz en 0 V— más `/ilda/{color,intensity,angle,speed}` para control de láser.
 
-The full address map is written next to your results as `osc_address_map.txt`, generated from the code rather than copied here:
+El mapa completo de direcciones se escribe junto a los resultados como `osc_address_map.txt`, generado desde el código en lugar de copiado aquí:
 
 ```bash
 ./bioacoustics.sh osc map detected_events/
 ```
 
-**Phenological shifts detected across days:** `breeding_chorus_onset` (low + high biophony energy both jump), `migration_acoustic_shift` (ADI turnover), `rain_season_transition` (geophonic events increase), `dawn_chorus_advance_delay` (onset time drifts), `nocturnal_community_change` (night assemblage turns over).
+**Cambios fenológicos detectados entre días:** `breeding_chorus_onset` (la energía biofónica baja y alta suben a la vez), `migration_acoustic_shift` (recambio de ADI), `rain_season_transition` (aumentan los eventos geofónicos), `dawn_chorus_advance_delay` (se desplaza la hora de inicio), `nocturnal_community_change` (se releva el ensamblaje nocturno).
 
 ---
 
-## Command reference
+## Referencia de comandos
 
 ```
-./bioacoustics.sh [subcommand] [options]
+./bioacoustics.sh [subcomando] [opciones]
 
-  detect      analyse recordings → event clips, videos, OSC, reports
-  phenology   build/refresh the calendar and its OSC exports
+  detect      analizar grabaciones → clips, videos, OSC, reportes
+  phenology   construir/actualizar el calendario y sus exportaciones OSC
   osc         export | phenology | events | serve | map
-  gallery     rebuild the event-clip gallery from existing results
+  gallery     reconstruir la galería a partir de resultados existentes
   media       spectrogram | poster | split | gif
-  metadata    AudioMoth metadata report
-  validate    score the detector against externally annotated datasets
-  doctor      check tooling and report what is available
-  wizard      the guided front-end (default when run with no arguments)
+  metadata    reporte de metadatos AudioMoth
+  validate    evaluar el detector contra corpus anotados externamente
+  doctor      revisar herramientas y reportar qué hay disponible
+  wizard      la interfaz guiada (por defecto si no se pasan argumentos)
 ```
 
-A path as the first argument means `detect`, so `./detect_events.sh rec.WAV --threshold 1.5` still works.
+Una ruta como primer argumento equivale a `detect`, así que `./detect_events.sh rec.WAV --threshold 1.5` sigue funcionando.
 
 ### detect
 
 ```
-  -o, --output-dir DIR        where results go (./detected_events)
+  -o, --output-dir DIR        dónde van los resultados (./detected_events)
       --sensitivity NAME      subtle | balanced | salient | dense
-      --threshold N           spectral flux threshold in MAD units (2.5)
-      --pre-roll N            seconds of context before onset (20)
-      --post-roll N           seconds of context after offset (10)
-      --baseline-window N     adaptive baseline window (60)
-      --min-event-duration N  discard shorter events (2)
-      --merge-gap N           merge events closer than this (5)
-      --max-clip-duration N   cap on clip length in seconds (300)
-      --ultrasonic            analyse at the native rate, extend the bands to
-                              cover bat echolocation, and switch event timing
-                              to a bat's scale. Required for recordings made
-                              above 48kHz; without it everything above 24kHz
-                              is discarded.
+      --threshold N           umbral de flujo espectral en unidades MAD (2.5)
+      --pre-roll N            segundos de contexto antes del inicio (20)
+      --post-roll N           segundos de contexto después del final (10)
+      --baseline-window N     ventana de la línea base adaptativa (60)
+      --min-event-duration N  descartar eventos más cortos (2)
+      --merge-gap N           fusionar eventos más cercanos que esto (5)
+      --max-clip-duration N   tope de duración del clip en segundos (300)
+      --ultrasonic            analizar a la frecuencia nativa, extender las
+                              bandas para cubrir ecolocación y ajustar los
+                              tiempos a la escala de un murciélago. Necesario
+                              para grabaciones por encima de 48kHz; sin esto
+                              todo lo que supere 24kHz se descarta.
 
-      --roles LIST            only clip these event types
+      --roles LIST            recortar solo estos tipos de evento
       --domains LIST          biophony,geophony,anthrophony,transition
-      --min-confidence N      skip classifications below this (0-1)
+      --min-confidence N      omitir clasificaciones por debajo de esto (0-1)
 
       --organize-by MODE      role | domain | flat
-      --max-freq N            top frequency in spectrogram renders (10000)
-      --no-video              skip MP4 rendering
-      --no-poster             skip PNG + thumbnail
-      --gif                   also render a looping GIF per clip
-      --no-reels              skip the per-type concatenated reels
-      --no-style-by-domain    one colormap for every event type
-      --no-gallery            skip gallery.html
-      --json-only             metadata only — no clips, media or reports
+      --max-freq N            frecuencia superior del espectrograma (10000)
+      --no-video              omitir el renderizado MP4
+      --no-poster             omitir PNG + miniatura
+      --gif                   además, un GIF en bucle por clip
+      --no-reels              omitir los reels concatenados por tipo
+      --no-style-by-domain    un solo mapa de color para todos los eventos
+      --no-gallery            omitir gallery.html
+      --json-only             solo metadatos — sin clips, medios ni reportes
 
-      --phenology             build the calendar afterwards
-      --days-per-second N     calendar playback rate baked into OSC exports (1)
-      --no-csv                skip the CSV export
+      --phenology             construir el calendario al terminar
+      --days-per-second N     ritmo de reproducción grabado en las exportaciones OSC (1)
+      --no-csv                omitir la exportación CSV
 
-      --osc-live              replay events live as they are found
-      --osc-host / --osc-port OSC target (127.0.0.1 : 57120)
-      --no-osc                skip OSC and SuperCollider output
+      --osc-live              reproducir los eventos en vivo a medida que se hallan
+      --osc-host / --osc-port destino OSC (127.0.0.1 : 57120)
+      --no-osc                omitir la salida OSC y SuperCollider
 ```
 
-The three sensitivity presets and what they change are tabulated under [Event detection](#event-detection).
+Los tres preajustes de sensibilidad y lo que modifican están tabulados en [Detección de eventos](#detección-de-eventos).
 
 ---
 
-## Replaced scripts
+## Scripts reemplazados
 
-Everything below still runs; each one now forwards to the unified pipeline and prints the replacement command.
+Todo lo de abajo sigue funcionando; cada uno reenvía ahora al pipeline unificado e imprime el comando que lo sustituye.
 
-| Old script | Now | What changed |
+| Script anterior | Ahora | Qué cambió |
 |---|---|---|
-| `make-spectrogram-movie-fixed.sh` | `bioacoustics.sh media spectrogram` | Same filter chain. Event clips are the default path; this is the whole-file escape hatch. Overlays no longer break on commas/colons in habitat names. |
-| `make-spectrogram-thumbnail-fixed.sh` | `bioacoustics.sh media poster` | Same `showspectrumpic` recipe, now also applied per event clip. Thumbnails are 256×144 (were 128×72). |
-| `master_script.sh` | `bioacoustics.sh detect` | Three chained scripts became stages of one pipeline, operating on events instead of whole recordings. |
-| `enhanced_html_generator.sh` | `bioacoustics.sh gallery` | Was byte-identical to the file below. One card per event grouped by role; reads `events.json` instead of scanning for `*-thumbnail.png`; self-contained lightbox; no ffprobe/jq/numfmt dependency. GPS tagging carried over, same `localStorage` key. |
-| `make-html-lightbox-table-fixed.sh` | `bioacoustics.sh gallery` | Duplicate of the above (same md5). |
-| `vid2gif.sh` | `bioacoustics.sh media gif` | ffmpeg `palettegen`/`paletteuse` instead of mplayer + ImageMagick + gifsicle. No temp frame dumps, no hard-coded `/opt/homebrew` paths. |
-| `split-video.sh` | `bioacoustics.sh media split` | Same size-budget approach, no `bc` dependency, audio re-encoded so each part plays standalone. |
+| `make-spectrogram-movie-fixed.sh` | `bioacoustics.sh media spectrogram` | La misma cadena de filtros. Los clips por evento son la vía por defecto; esto es la salida de emergencia para archivo completo. Las leyendas ya no se rompen con comas ni dos puntos en los nombres de cobertura. |
+| `make-spectrogram-thumbnail-fixed.sh` | `bioacoustics.sh media poster` | La misma receta de `showspectrumpic`, ahora aplicada también por clip. Las miniaturas son de 256×144 (antes 128×72). |
+| `master_script.sh` | `bioacoustics.sh detect` | Tres scripts encadenados se volvieron etapas de un pipeline, operando sobre eventos en vez de grabaciones completas. |
+| `enhanced_html_generator.sh` | `bioacoustics.sh gallery` | Era idéntico byte a byte al archivo siguiente. Una tarjeta por evento agrupada por rol; lee `events.json` en lugar de rastrear `*-thumbnail.png`; lightbox autocontenido; sin dependencia de ffprobe/jq/numfmt. El etiquetado GPS se conservó, con la misma clave de `localStorage`. |
+| `make-html-lightbox-table-fixed.sh` | `bioacoustics.sh gallery` | Duplicado del anterior (mismo md5). |
+| `vid2gif.sh` | `bioacoustics.sh media gif` | `palettegen`/`paletteuse` de ffmpeg en lugar de mplayer + ImageMagick + gifsicle. Sin volcado de marcos temporales, sin rutas fijas a `/opt/homebrew`. |
+| `split-video.sh` | `bioacoustics.sh media split` | El mismo enfoque de presupuesto de tamaño, sin dependencia de `bc`, con el audio recodificado para que cada parte se reproduzca por separado. |
 
-Unchanged and reachable from the wizard: `AudioMothRECS_LaLuna/audiomoth_processing.sh` (metadata report) and `HDR-DNG-DJI-IMGS` (bracketed DNG → HDR).
+Sin cambios y accesibles desde el asistente: `AudioMothRECS_LaLuna/audiomoth_processing.sh` (reporte de metadatos) y `HDR-DNG-DJI-IMGS` (DNG horquillado → HDR).
 
 ---
 
-## How detection works
+## Cómo funciona la detección
 
-### Spectral analysis
+### Análisis espectral
 
-Audio is mixed to mono, optionally downsampled (polyphase, `scipy.signal.resample_poly`), then transformed frame by frame:
+El audio se mezcla a mono, opcionalmente se submuestrea (polifásico, `scipy.signal.resample_poly`) y luego se transforma marco a marco:
 
 $$X(t,k) = \sum_{n=0}^{N-1} x(tH + n)\,w(n)\,e^{-2\pi i kn/N}$$
 
-with **N = frame_size = 2048**, **H = hop_size = 512** (75 % overlap) and *w* a periodic Hann window. Only the real half is kept, giving `N/2 + 1 = 1025` bins.
+con **N = frame_size = 2048**, **H = hop_size = 512** (75 % de solapamiento) y *w* una ventana de Hann periódica. Solo se conserva la mitad real, lo que da `N/2 + 1 = 1025` bandas.
 
-Resolution follows directly from *N*, *H* and the rate:
+La resolución se desprende directamente de *N*, *H* y la frecuencia:
 
-| | 48 kHz (default) | 192 kHz + `--ultrasonic` |
+| | 48 kHz (por defecto) | 192 kHz + `--ultrasonic` |
 |---|---|---|
-| Frequency resolution `fs/N` | 23.4 Hz | 187.5 Hz |
-| Window length `N/fs` | 42.7 ms | 5.3 ms |
-| Frame spacing `H/fs` | 10.7 ms | 1.3 ms |
+| Resolución en frecuencia `fs/N` | 23.4 Hz | 187.5 Hz |
+| Longitud de ventana `N/fs` | 42.7 ms | 5.3 ms |
+| Separación entre marcos `H/fs` | 10.7 ms | 1.3 ms |
 
-The default is matched to bird syllables (50–200 ms); the ultrasonic setting trades frequency detail for the time detail a 1–10 ms echolocation pulse requires. This is the classic uncertainty trade — you cannot have both, and the right side depends on what you are listening for.
+El valor por defecto está ajustado a las sílabas de las aves (50–200 ms); el ajuste ultrasónico cambia detalle en frecuencia por el detalle temporal que exige un pulso de ecolocación de 1–10 ms. Es el compromiso clásico de incertidumbre: no se pueden tener ambos, y qué lado conviene depende de qué se esté escuchando.
 
-**Per-frame features** (all from the magnitude spectrum `|X|`):
+**Rasgos por marco** (todos a partir del espectro de magnitud `|X|`):
 
-| Feature | Definition | Reads as |
+| Rasgo | Definición | Se lee como |
 |---|---|---|
-| Spectral flux | $\Phi(t) = \sqrt{\sum_k \max(0,\,\lvert X(t,k)\rvert - \lvert X(t-1,k)\rvert)^2}$ | rate of spectral *change*; half-wave rectified so only new energy counts. **This is the detection signal.** |
-| Spectral centroid | $C(t) = \left(\sum_k f_k \lvert X \rvert\right) / \left(\sum_k \lvert X \rvert\right)$ | brightness, in Hz |
-| Spectral flatness | $F(t) = \exp\left(\overline{\ln \lvert X \rvert^2}\right) / \overline{\lvert X \rvert^2}$ | 1.0 = white noise, 0.0 = pure tone (Wiener entropy) |
-| Band energy | $E_b(t) = \sum_{f_k \in b} \lvert X(t,k)\rvert^2$ | power per ecological band |
+| Flujo espectral | $\Phi(t) = \sqrt{\sum_k \max(0,\,\lvert X(t,k)\rvert - \lvert X(t-1,k)\rvert)^2}$ | tasa de *cambio* espectral; rectificado de media onda para que solo cuente la energía nueva. **Es la señal de detección.** |
+| Centroide espectral | $C(t) = \left(\sum_k f_k \lvert X \rvert\right) / \left(\sum_k \lvert X \rvert\right)$ | brillo, en Hz |
+| Planitud espectral | $F(t) = \exp\left(\overline{\ln \lvert X \rvert^2}\right) / \overline{\lvert X \rvert^2}$ | 1.0 = ruido blanco, 0.0 = tono puro (entropía de Wiener) |
+| Energía por banda | $E_b(t) = \sum_{f_k \in b} \lvert X(t,k)\rvert^2$ | potencia por banda ecológica |
 
-Two caveats that matter for interpretation and for any model trained on these: **centroid and flatness are both global** — computed across the entire spectrum, not within the event's own band. A band-limited event therefore reports a flatness that reflects how much of the *whole* spectrum it fills, and a centroid pulled upward by the wideband noise floor. See the rain example above for measured numbers.
+Dos salvedades que importan para la interpretación y para cualquier modelo entrenado sobre esto: **el centroide y la planitud son ambos globales**, calculados sobre el espectro completo y no dentro de la banda propia del evento. Un evento de banda limitada reporta entonces una planitud que refleja cuánto llena del espectro *entero*, y un centroide empujado hacia arriba por el piso de ruido de banda ancha. Ver el ejemplo de la lluvia más arriba para los números medidos.
 
-**Ecological bands.** Half-open `[lo, hi)` in Hz, clipped to Nyquist so a 48 kHz recording reports zero energy above 24 kHz rather than inventing it.
+**Bandas ecológicas.** Semiabiertas `[lo, hi)` en Hz, recortadas a Nyquist para que una grabación de 48 kHz reporte energía cero por encima de 24 kHz en vez de inventarla.
 
-| Band | Range | Ecological content |
+| Banda | Rango | Contenido ecológico |
 |------|-------|--------------------|
-| `geophony` | 0–2 kHz | wind, rain, water flow, distant thunder |
-| `biophony_low` | 2–4 kHz | anurans, large mammals, doves and tinamous |
-| `biophony_mid` | 4–8 kHz | most passerine song, many orthopterans |
-| `biophony_high` | 8–16 kHz | cicadas, katydids, high passerines |
-| `ultrasonic` | 16–24 kHz | the low edge of bat calls, if the rate allows |
+| `geophony` | 0–2 kHz | viento, lluvia, agua corriente, truenos lejanos |
+| `biophony_low` | 2–4 kHz | anuros, mamíferos grandes, palomas y tinamúes |
+| `biophony_mid` | 4–8 kHz | la mayor parte del canto de paseriformes, muchos ortópteros |
+| `biophony_high` | 8–16 kHz | chicharras, esperanzas, paseriformes agudos |
+| `ultrasonic` | 16–24 kHz | el borde grave de las llamadas de murciélago, si la frecuencia lo permite |
 
-With `--ultrasonic` the last band is replaced by `ultrasonic_low` (16–40 kHz), `ultrasonic_mid` (40–80 kHz) and `ultrasonic_high` (80–160 kHz).
+Con `--ultrasonic` la última banda se reemplaza por `ultrasonic_low` (16–40 kHz), `ultrasonic_mid` (40–80 kHz) y `ultrasonic_high` (80–160 kHz).
 
-### Event detection
+### Detección de eventos
 
-An event is a moment when the spectrum *changes*, measured against what the recording has been doing recently:
+Un evento es un momento en que el espectro *cambia*, medido contra lo que la grabación ha venido haciendo recientemente:
 
 $$\Phi(t) > \mathrm{median}_{W}(\Phi) + \kappa \cdot 1.4826 \cdot \mathrm{MAD}_{W}(\Phi)$$
 
-where *W* is a **60-second causal window** (look-back only, so detection could run live), κ is `--threshold` (default 2.5), and 1.4826 is the constant that makes the MAD a consistent estimator of the standard deviation for normally distributed data.
+donde *W* es una **ventana causal de 60 segundos** (solo mira hacia atrás, de modo que la detección podría correr en vivo), κ es `--threshold` (2.5 por defecto), y 1.4826 es la constante que vuelve a la MAD un estimador consistente de la desviación estándar para datos normalmente distribuidos.
 
-*W* is capped at **half the recording length**. AudioMoth duty cycles routinely write 60-second files, and a 60-second window over a 60-second file makes the baseline a global constant that cannot adapt at all. On a La Luna dusk recording that put the threshold at 165 against a maximum flux of 143, and the detector returned zero events on an audibly busy chorus.
+*W* se limita a **la mitad de la duración de la grabación**. Los ciclos de trabajo de AudioMoth escriben habitualmente archivos de 60 segundos, y una ventana de 60 segundos sobre un archivo de 60 segundos convierte la línea base en una constante global incapaz de adaptarse. En una grabación de atardecer de La Luna eso puso el umbral en 165 frente a un flujo máximo de 143, y el detector devolvió cero eventos sobre un coro audiblemente activo.
 
-Median and MAD rather than mean and σ because a robust baseline is the whole point: a single loud event must not raise the bar that judges the events around it. The MAD's breakdown point is 50 % — half the window can be outliers before the estimate moves.
+Mediana y MAD en lugar de media y σ porque una línea base robusta es justamente el punto: un único evento fuerte no debe elevar la vara que juzga a los eventos vecinos. El punto de ruptura de la MAD es del 50 %: la mitad de la ventana puede ser atípica antes de que la estimación se mueva.
 
-1. Compute the running median and MAD of Φ over the causal window
-2. Trigger where Φ exceeds the threshold; contiguous frames form a region
-3. Merge regions closer than `--merge-gap` (5 s default)
-4. Discard merged events shorter than `--min-event-duration` (2 s default)
-5. Pad each clip with pre/post-roll, capped at `--max-clip-duration`
+1. Calcular la mediana y la MAD móviles de Φ sobre la ventana causal
+2. Disparar donde Φ supere el umbral; los marcos contiguos forman una región
+3. Fusionar regiones más cercanas que `--merge-gap` (5 s por defecto)
+4. Descartar eventos fusionados más cortos que `--min-event-duration` (2 s por defecto)
+5. Rellenar cada clip con margen previo/posterior, con tope en `--max-clip-duration`
 
-Because the baseline adapts continuously, non-stationary backgrounds — rain arriving, a dawn chorus building over twenty minutes — raise the threshold with them rather than saturating the detector.
+Como la línea base se adapta continuamente, los fondos no estacionarios —la llegada de la lluvia, un coro del amanecer que se construye durante veinte minutos— elevan el umbral con ellos en lugar de saturar al detector.
 
-**Sensitivity presets** move κ and the timing together:
+**Los preajustes de sensibilidad** mueven κ y los tiempos a la vez:
 
-| Preset | κ (MAD units) | Min duration | Merge gap |
+| Preajuste | κ (unidades MAD) | Duración mín. | Brecha de fusión |
 |---|---|---|---|
 | `subtle` | 1.5 | 1.0 s | 3 s |
-| `balanced` (default) | 2.5 | 2.0 s | 5 s |
+| `balanced` (por defecto) | 2.5 | 2.0 s | 5 s |
 | `salient` | 4.0 | 3.0 s | 8 s |
 | `dense` | 8.0 | 0.3 s | 0.25 s |
 
-`dense` exists because the first three all fail on a continuously active
-soundscape. κ is measured in robust standard deviations of the *local* flux, so
-it adapts to loudness — but not to how restlessly a soundscape changes. Tuned on
-2.1 hours of Manakai dawn and dusk recordings at 192 kHz:
+`dense` existe porque los tres primeros fallan en un paisaje sonoro
+continuamente activo. κ se mide en desviaciones estándar robustas del flujo
+*local*, así que se adapta al volumen, pero no a cuán incesantemente cambia un
+paisaje sonoro. Ajustado sobre 2.1 horas de grabaciones de amanecer y atardecer
+de Manakai a 192 kHz:
 
-| Setting | events/h | median | p90 | coverage |
+| Ajuste | eventos/h | mediana | p90 | cobertura |
 |---|---|---|---|---|
-| `balanced` (κ 2.5, merge 1 s) | 24 | 7.4 s | **499 s** | **98 %** |
-| `dense` (κ 8, merge 0.25 s) | 619 | 0.9 s | 5.8 s | 46 % |
+| `balanced` (κ 2.5, fusión 1 s) | 24 | 7.4 s | **499 s** | **98 %** |
+| `dense` (κ 8, fusión 0.25 s) | 619 | 0.9 s | 5.8 s | 46 % |
 
-98 % coverage means the detector is only reporting "sound exists here", and a
-499-second event cannot fit the clip meant to hold it. On one dawn hour the
-same file gives 12 events with a median of 108 s and a maximum of 1780 s at
-`balanced`, against 548 events with a median of 0.8 s and a maximum of 47 s at
-`dense`.
+Una cobertura del 98 % significa que el detector solo está informando "aquí hay
+sonido", y un evento de 499 segundos no cabe en el clip que debe contenerlo. En
+una hora de amanecer, el mismo archivo da 12 eventos con mediana de 108 s y
+máximo de 1780 s con `balanced`, frente a 548 eventos con mediana de 0.8 s y
+máximo de 47 s con `dense`.
 
-Note that κ is in **robust standard deviations of the local flux**, not an absolute level — the same setting behaves comparably at a loud site and a quiet one, which is what makes cross-site comparison meaningful.
+Nótese que κ está en **desviaciones estándar robustas del flujo local**, no en un nivel absoluto: el mismo ajuste se comporta de forma comparable en un sitio ruidoso y en uno silencioso, que es lo que hace significativa la comparación entre sitios.
 
-### Deep ecology classification: Parliament of the Living
+### Clasificación desde la ecología profunda: el Parlamento de lo Viviente
 
-Events are catalogued by their **role in the soundscape**, not by species identity. All acoustic participants — biological, geological, human — are treated as having inherent ecological value, and the system measures acoustic democracy as the Shannon entropy of role distribution.
+Los eventos se catalogan por su **rol en el paisaje sonoro**, no por identidad de especie. Todos los participantes acústicos —biológicos, geológicos, humanos— se tratan como poseedores de valor ecológico intrínseco, y el sistema mide la democracia acústica como la entropía de Shannon de la distribución de roles.
 
-**Biophonic voices:** `dawn_chorus_participant`, `dusk_chorus_participant`, `nocturnal_voice`, `territorial_announcement`, `alarm_or_alert`, `insect_chorus`, `amphibian_assembly`, `bat_echolocation` (ultrasonic mode only)
+**Voces biofónicas:** `dawn_chorus_participant`, `dusk_chorus_participant`, `nocturnal_voice`, `territorial_announcement`, `alarm_or_alert`, `insect_chorus`, `amphibian_assembly`, `bat_echolocation` (solo en modo ultrasónico)
 
-**Geophonic elements:** `rain_event`, `wind_event`, `water_flow`
+**Elementos geofónicos:** `rain_event`, `wind_event`, `water_flow`
 
-**Anthrophonic intrusions:** `mechanical_intrusion`, `aircraft_passage`
+**Intrusiones antrofónicas:** `mechanical_intrusion`, `aircraft_passage`
 
-**Acoustic transitions (temporal ecotones):** `silence_to_activity`, `activity_to_silence`, `community_shift`
+**Transiciones acústicas (ecotonos temporales):** `silence_to_activity`, `activity_to_silence`, `community_shift`
 
-Classification uses time of day (from the AudioMoth timestamp), dominant band, spectral flatness, duration and energy distribution, and reports a confidence score with human-readable reasoning.
+La clasificación usa hora del día (de la marca temporal del AudioMoth), banda dominante, planitud espectral, duración y distribución de energía, y reporta una puntuación de confianza con un razonamiento legible.
 
-### Ecoacoustic indices
+### Índices ecoacústicos
 
-Computed per event and per recording:
+Calculados por evento y por grabación:
 
-| Index | Reference | Description |
+| Índice | Referencia | Descripción |
 |-------|-----------|-------------|
-| **ACI** | Pieretti et al. 2011 | Temporal variability within frequency bins. High = complex biophonic activity. |
-| **BIO** | Boelman et al. 2007 | Area under the mean spectrum curve, 2–8 kHz. |
-| **NDSI** | Kasten et al. 2012 | (biophony − anthrophony) / total. −1 = all anthrophony, +1 = all biophony. |
-| **ADI** | Villanueva-Rivera et al. 2011 | Shannon entropy of band activity proportions. |
-| **AEI** | Villanueva-Rivera et al. 2011 | Gini coefficient of band activity. |
+| **ACI** | Pieretti et al. 2011 | Variabilidad temporal dentro de cada banda de frecuencia. Alto = actividad biofónica compleja. |
+| **BIO** | Boelman et al. 2007 | Área bajo la curva del espectro medio, 2–8 kHz. |
+| **NDSI** | Kasten et al. 2012 | (biofonía − antrofonía) / total. −1 = toda antrofonía, +1 = toda biofonía. |
+| **ADI** | Villanueva-Rivera et al. 2011 | Entropía de Shannon de las proporciones de actividad por banda. |
+| **AEI** | Villanueva-Rivera et al. 2011 | Coeficiente de Gini de la actividad por banda. |
 
-All five are computed twice: once per event (over that event's frames only) and once per whole recording. The per-event values are what land in `events.json` and on the video captions; the per-recording values feed the calendar.
+Los cinco se calculan dos veces: una por evento (solo sobre los marcos de ese evento) y otra por grabación completa. Los valores por evento son los que quedan en `events.json` y en las leyendas del video; los valores por grabación alimentan el calendario.
 
-Per-recording parliament statistics, both Shannon entropies over the event set:
+Estadísticos del parlamento por grabación, ambos entropías de Shannon sobre el conjunto de eventos:
 
 $$H = -\sum_i p_i \log_2 p_i$$
 
-- **Democracy index** — *p* over the distribution of ecological **roles**. Higher means no single kind of voice dominates the assemblage.
-- **Niche partitioning** — *p* over the distribution of dominant **bands**. Higher means the community is spread across the spectrum rather than crowded into one band.
+- **Índice de democracia** — *p* sobre la distribución de **roles** ecológicos. Más alto significa que ningún tipo de voz domina el ensamblaje.
+- **Partición de nicho** — *p* sobre la distribución de **bandas** dominantes. Más alto significa que la comunidad se reparte por el espectro en vez de agolparse en una banda.
 
-Both inherit the classifier's calibration: the democracy index is only as meaningful as the role assignment beneath it, whereas niche partitioning rests on band energies and is therefore the sturdier of the two.
+Ambos heredan la calibración del clasificador: el índice de democracia solo es tan significativo como la asignación de roles que lo sostiene, mientras que la partición de nicho descansa sobre energías por banda y es, por tanto, el más sólido de los dos.
 
 ---
 
-## Phenological phases and how they relate to the colours
+## Fases fenológicas y su relación con los colores
 
-The calendar layer is where colour, classification and season meet. Each day of recording is reduced to a frame of scalars; a phase is a **sustained change in the composition of those frames**, not a property any single clip has.
+La capa del calendario es donde se encuentran color, clasificación y temporada. Cada día de grabación se reduce a un marco de escalares; una fase es un **cambio sostenido en la composición de esos marcos**, no una propiedad que tenga ningún clip individual.
 
-### From clips to phases
+### De los clips a las fases
 
 ```
-event clips (coloured by domain)
-  → daily aggregation   role counts, domain shares, band energies, mean indices
-  → per-day frame       activity, richness, biophony/geophony/anthrophony shares…
-  → normalization       every field also scaled to 0-1 across the dataset (cv)
-  → phase detection     day-over-day comparisons crossing a threshold
+clips de evento (coloreados por dominio)
+  → agregación diaria     conteos de roles, proporciones de dominio, energías, índices medios
+  → marco por día         actividad, riqueza, proporciones de biofonía/geofonía/antrofonía…
+  → normalización         cada campo también escalado a 0-1 sobre el conjunto (cv)
+  → detección de fases    comparaciones día a día que cruzan un umbral
 ```
 
-The domain shares in each day's frame are literally *the proportion of that day's clips rendered in each colour*. A gallery whose cards turn from green to blue over a fortnight is the same fact as `cv_geophony` rising and `cv_biophony` falling, and the same fact as a `rain_season_transition` event on the calendar. Colour, CSV column and OSC message are three renderings of one measurement.
+Las proporciones de dominio en el marco de cada día son literalmente *la proporción de los clips de ese día renderizados en cada color*. Una galería cuyas tarjetas pasan de verde a azul en quince días es el mismo hecho que `cv_geophony` subiendo y `cv_biophony` bajando, y el mismo hecho que un evento `rain_season_transition` en el calendario. Color, columna del CSV y mensaje OSC son tres representaciones de una sola medición.
 
-### The five phase detectors
+### Los cinco detectores de fase
 
-| Phase | Fires when | Reads from | Threshold |
+| Fase | Se dispara cuando | Lee de | Umbral |
 |---|---|---|---|
-| `breeding_chorus_onset` | `biophony_low` **and** `biophony_high` energy both more than double vs the previous day | band energies | `breeding_energy_ratio` = 2.0 |
-| `migration_acoustic_shift` | ADI changes by more than 0.5 between days — frequency niches opening or closing | mean ADI | `adi_shift` = 0.5 |
-| `rain_season_transition` | geophonic event count jumps by more than 3 in a day | domain counts | `geophony_event_jump` = 3 |
-| `dawn_chorus_advance_delay` | first biophonic event of the morning shifts by more than 15 min | dawn onset times | `dawn_shift_minutes` = 15 |
-| `nocturnal_community_change` | the set of night-active roles gains or loses a member | role sets | any change |
+| `breeding_chorus_onset` | la energía de `biophony_low` **y** `biophony_high` más que se duplica frente al día anterior | energías por banda | `breeding_energy_ratio` = 2.0 |
+| `migration_acoustic_shift` | el ADI cambia más de 0.5 entre días — nichos de frecuencia que se abren o cierran | ADI medio | `adi_shift` = 0.5 |
+| `rain_season_transition` | el conteo de eventos geofónicos salta en más de 3 en un día | conteos de dominio | `geophony_event_jump` = 3 |
+| `dawn_chorus_advance_delay` | el primer evento biofónico de la mañana se desplaza más de 15 min | horas de inicio del coro | `dawn_shift_minutes` = 15 |
+| `nocturnal_community_change` | el conjunto de roles activos de noche gana o pierde un miembro | conjuntos de roles | cualquier cambio |
 
-Why these five: they are the phenological signals that a **soundscape** can carry without species identification. Breeding choruses are a reproductive phase (anurans in the low band, orthopterans in the high one — hence requiring both to move together, which distinguishes a chorus from a passing noise source). Dawn chorus timing tracks photoperiod and is one of the most reliable seasonal clocks in the tropics, where temperature cues are weak. In a **tropical dry forest** specifically, the wet/dry transition is the dominant annual event, and it announces itself twice over: directly as geophony, and indirectly as the anuran explosion that follows the first rains within days.
+Por qué estas cinco: son las señales fenológicas que un **paisaje sonoro** puede transportar sin identificación de especies. Los coros reproductivos son una fase reproductiva (anuros en la banda baja, ortópteros en la alta — de ahí que se exija que ambas se muevan juntas, lo que distingue un coro de una fuente de ruido de paso). El horario del coro del amanecer sigue al fotoperiodo y es uno de los relojes estacionales más confiables en el trópico, donde las señales de temperatura son débiles. En un **bosque seco tropical** en particular, la transición seca–lluvias es el evento anual dominante, y se anuncia por partida doble: directamente como geofonía, e indirectamente como la explosión de anuros que sigue a las primeras lluvias en cuestión de días.
 
-Dawn onset deserves a caveat: it is currently defined as the first biophonic event between 03:00 and 08:00, which depends on a recording actually existing at that hour. Gaps in a duty cycle become spurious "delays". For phenology, schedule recordings to cover dawn every day rather than sampling opportunistically.
+El inicio del amanecer merece una salvedad: hoy se define como el primer evento biofónico entre las 03:00 y las 08:00, lo que depende de que exista efectivamente una grabación a esa hora. Los huecos de un ciclo de trabajo se convierten en "retrasos" espurios. Para fenología, programe grabaciones que cubran el amanecer todos los días en lugar de muestrear de manera oportunista.
 
-### The colour of a season
+### El color de una temporada
 
-Because the colormap is chosen by domain, a season has a visual signature you can read directly from the gallery or the calendar heatmap:
+Como el mapa de color lo elige el dominio, una temporada tiene una firma visual que se lee directamente en la galería o en el mapa de calor del calendario:
 
-- **Dry season, dawn** — mostly green, concentrated in `biophony_mid`, high `democracy_index` as many bird species overlap
-- **First rains** — magma transitions appear as regimes change, then blue geophony blocks
-- **Wet season, night** — green again but shifted low (`biophony_low`, anuran chorus) and high (`biophony_high`, orthopterans), with the middle emptier; `niche_partitioning` rises
-- **Any season, near a road** — fiery bands recur at human hours, and `NDSI` falls toward zero or below
+- **Temporada seca, amanecer** — mayormente verde, concentrado en `biophony_mid`, con `democracy_index` alto porque se solapan muchas especies de aves
+- **Primeras lluvias** — aparecen transiciones magma cuando cambian los regímenes, y luego bloques azules de geofonía
+- **Temporada de lluvias, noche** — verde otra vez pero desplazado hacia lo grave (`biophony_low`, coro de anuros) y lo agudo (`biophony_high`, ortópteros), con el medio más vacío; `niche_partitioning` sube
+- **Cualquier temporada, cerca de una vía** — bandas ígneas que reaparecen en horarios humanos, y `NDSI` cayendo hacia cero o por debajo
 
-Those are the patterns the indices are designed to quantify, and the reason both the colour and the number are kept for every event.
+Esos son los patrones que los índices están diseñados para cuantificar, y la razón por la que se conservan tanto el color como el número de cada evento.
 
 ---
 
-## Features and rules: the calibration tension
+## Rasgos y reglas: la tensión de la calibración
 
-The toolkit carries two parallel descriptions of every event, and they do not
-yet talk to each other.
+La herramienta lleva dos descripciones paralelas de cada evento, y todavía no
+se hablan entre sí.
 
-**Rules** assign the ecological role. They are auditable, need no training
-data, and encode real ecological knowledge — a dawn chorus *is* mid-frequency
-activity at dawn. But they are hand-tuned, and validation has now broken them
-twice: a low-frequency anuran chorus reads as `geophony` because 0–2 kHz is
-defined as weather, and a sustained katydid band read as `bat_echolocation`
-because 16–40 kHz was defined as bats.
+**Las reglas** asignan el rol ecológico. Son auditables, no requieren datos de
+entrenamiento y codifican conocimiento ecológico real: un coro del amanecer
+*es* actividad de frecuencia media al amanecer. Pero están ajustadas a mano, y
+la validación ya las ha roto dos veces: un coro de anuros graves se lee como
+`geophony` porque 0–2 kHz está definido como clima, y una banda sostenida de
+esperanzas se leyó como `bat_echolocation` porque 16–40 kHz se definió como
+murciélagos.
 
-**Features** measure the signal. `band_crest`, `band_entropy`, `periodicity`
-and `pulse_rate_hz` are arithmetic, not judgement. But a number is not an
-ecological category, and nothing yet maps one onto the other.
+**Los rasgos** miden la señal. `band_crest`, `band_entropy`, `periodicity` y
+`pulse_rate_hz` son aritmética, no juicio. Pero un número no es una categoría
+ecológica, y nada mapea todavía lo uno sobre lo otro.
 
-### What that costs, in one frame
+### Lo que eso cuesta, en un solo cuadro
 
-A pond at 21:00, La Luna, station AU-MAM-10. The caption reads
-`nocturnal voice [probable 65%]`. The column, on the same frame, reports:
+Un cuerpo de agua a las 21:00, La Luna, estación AU-MAM-10. La leyenda dice
+`nocturnal voice [probable 65%]`. La columna, en el mismo cuadro, reporta:
 
 ```
 band       biophony high        entropy   0.951
 crest      1.4                  pulse     11.8 Hz
 ```
 
-An entropy of 0.951 means the energy is spread almost evenly across the band;
-a crest of 1.4 means there is no peak worth the name. Together they say
-*broadband noise*. The rule nevertheless returned "probable" at 65 %, because
-it consulted only the hour and the dominant band — the two measurements that
-contradict its premise were computed, printed beside it, and ignored.
+Una entropía de 0.951 significa que la energía se reparte casi por igual en la
+banda; una cresta de 1.4 significa que no hay pico digno de ese nombre. Juntas
+dicen *ruido de banda ancha*. La regla devolvió aun así "probable" al 65 %,
+porque consultó solo la hora y la banda dominante: las dos mediciones que
+contradicen su premisa se calcularon, se imprimieron al lado y se ignoraron.
 
-Nothing here is broken. The rule did what it was written to do and the
-features measured what they were written to measure. They simply never meet.
+Nada está roto aquí. La regla hizo lo que se escribió que hiciera y los rasgos
+midieron lo que se escribió que midieran. Simplemente nunca se encuentran.
 
-### The tension
+### La tensión
 
-The obvious response is to tune thresholds until the output looks right. That
-is the one move to avoid. Output tuned until it matches intuition is fitted to
-intuition, and it will look right by construction — the fit is unfalsifiable
-because there is no independent standard it could fail against.
+La respuesta obvia es ajustar umbrales hasta que la salida se vea bien. Ese es
+justamente el movimiento a evitar. Una salida ajustada hasta coincidir con la
+intuición está ajustada *a la intuición*, y se verá bien por construcción: el
+ajuste es infalsable porque no hay un estándar independiente contra el cual
+pudiera fallar.
 
-This project has already demonstrated the sharper version of that trap. The
-synthetic test corpus was written by the same hand as the rules, so the
-fixtures encoded the same assumptions the code did and agreed with it. Twice:
-synthetic "amphibians" were generated at 2.6–3.1 kHz because the band table
-assumes anurans live there, and synthetic "rain" was given a Hann envelope
-that made it score as the most periodic thing in the corpus. Both times the
-tests passed and the belief was wrong.
+Este proyecto ya demostró la versión más aguda de esa trampa. El corpus
+sintético de prueba lo escribió la misma mano que las reglas, así que el
+material codificaba los mismos supuestos que el código y le daba la razón. Dos
+veces: los "anfibios" sintéticos se generaron entre 2.6 y 3.1 kHz porque la
+tabla de bandas supone que ahí viven los anuros, y a la "lluvia" sintética se
+le dio una envolvente de Hann que la volvió lo más periódico del corpus. Las
+dos veces las pruebas pasaron y la creencia era falsa.
 
-The discipline that follows: **thresholds move only against data somebody else
-annotated.** Until then the claims are marked rather than sharpened.
+La disciplina que se desprende: **los umbrales se mueven solo contra datos que
+haya anotado otra persona.** Hasta entonces las afirmaciones se marcan, no se
+afinan.
 
-### How to balance the two — in order of cost
+### Cómo equilibrar ambos — en orden de costo
 
-**1. Make confidence earned rather than assigned.** Today each rule branch
-returns a constant its author chose. It could instead start from that constant
-and be adjusted by how many independent measurements agree with the rule's
-premise. `nocturnal_voice` claims a *voice*; a voice is spectrally
-concentrated; crest 1.4 and entropy 0.951 contradict that, so the confidence
-should fall rather than sit at 0.65. This costs no training data, keeps every
-rule auditable, and turns `confidence` from a fiction into something with
-content.
+**1. Que la confianza se gane en vez de asignarse.** Hoy cada rama de regla
+devuelve una constante que su autor eligió. Podría en cambio partir de esa
+constante y ajustarse según cuántas mediciones independientes concuerden con la
+premisa de la regla. `nocturnal_voice` afirma una *voz*; una voz está
+espectralmente concentrada; una cresta de 1.4 y una entropía de 0.951 lo
+contradicen, así que la confianza debería bajar en lugar de quedarse en 0.65.
+Esto no cuesta datos de entrenamiento, mantiene auditable cada regla y
+convierte `confidence` de una ficción en algo con contenido.
 
-**2. Let features veto, not just weigh.** Where a measurement directly refutes
-a rule's premise, demote the event to `candidate` or `unclassified` instead of
-emitting the role at face value. The bat/katydid fix already does this with
-duration; the same shape generalises to crest, entropy and periodicity.
+**2. Que los rasgos puedan vetar, no solo pesar.** Donde una medición refute
+directamente la premisa de una regla, degradar el evento a `candidate` o
+`unclassified` en lugar de emitir el rol tal cual. La corrección de
+murciélago/esperanza ya hace esto con la duración; la misma forma se generaliza
+a cresta, entropía y periodicidad.
 
-**3. Abstain loudly.** When no rule's premise survives its features, say
-`unclassified` and surface the feature vector. That clip is not a failure — it
-is the one an annotator should see first.
+**3. Abstenerse en voz alta.** Cuando ninguna premisa sobrevive a sus rasgos,
+decir `unclassified` y mostrar el vector de rasgos. Ese clip no es un fracaso:
+es el primero que debería ver quien anota.
 
-**4. Rank clips for annotation by disagreement.** The most informative clip to
-label is the one where rule and features disagree most. Sorting the gallery
-that way turns the existing output into an annotation queue, and it is active
-learning without a model.
+**4. Ordenar los clips para anotación por desacuerdo.** El clip más informativo
+para etiquetar es aquel donde regla y rasgos más discrepan. Ordenar la galería
+así convierte la salida actual en una cola de anotación, y es aprendizaje activo
+sin modelo.
 
-**5. Only then, learn the mapping.** With a few hundred verified events, fit
-the thresholds — or replace the rules with a classifier over the feature
-vector, keeping the rules as the interpretable baseline it has to beat. Step 4
-is what makes step 5 affordable.
+**5. Solo entonces, aprender el mapeo.** Con unos cientos de eventos
+verificados, ajustar los umbrales — o reemplazar las reglas por un clasificador
+sobre el vector de rasgos, conservando las reglas como la línea base
+interpretable que hay que superar. El paso 4 es lo que hace asequible el paso 5.
 
-Steps 1–4 need no annotations and would make the current output more honest
-immediately. They are deliberately *not* implemented yet: each one changes what
-the labels mean, and that is a decision for the person whose thesis rests on
-them.
+Los pasos 1–4 no requieren anotaciones y harían la salida actual más honesta de
+inmediato. Están deliberadamente *sin* implementar: cada uno cambia lo que
+significan las etiquetas, y esa es una decisión de quien apoya su tesis en ellas.
 
 ---
 
-## Using this as a dataset (machine learning)
+## Usar esto como conjunto de datos (aprendizaje automático)
 
-The pipeline is a **weak-labelling and segmentation front end**, not a classifier to be trusted as ground truth. Read this section before training anything on its output.
+El pipeline es un **front end de etiquetado débil y segmentación**, no un clasificador en el que se pueda confiar como verdad de referencia. Lea esta sección antes de entrenar cualquier cosa con su salida.
 
-### What each artefact is good for
+### Para qué sirve cada artefacto
 
-| Artefact | Suitable as | Not suitable as |
+| Artefacto | Sirve como | No sirve como |
 |---|---|---|
-| `clips/**/*.wav` | training audio, already segmented to events with context | — |
-| `onset_s`, `offset_s`, `duration_s` | segmentation targets; derived from signal, not judgement | precise boundaries (threshold crossings, ±1 frame) |
-| `band_energies`, `centroid`, `flatness`, `peak_flux` | input features; deterministic functions of the audio | — |
-| `aci`, `bio`, `ndsi`, `adi`, `aei` | input features; published, comparable across studies | — |
-| `dominant_band` | a reliable coarse label — it is just an argmax over measured energy | species identity |
-| `domain` | a defensible 4-class weak label | ground truth where transitions dominate |
-| `role` | a **hypothesis** from hand-tuned thresholds | a training target without human verification |
-| `confidence` | a hand-assigned constant per rule branch | a calibrated probability |
-| `certainty` | a triage tier — which roles are worth a human's time | evidence in itself |
+| `clips/**/*.wav` | audio de entrenamiento, ya segmentado por evento con contexto | — |
+| `onset_s`, `offset_s`, `duration_s` | objetivos de segmentación; derivados de la señal, no de un juicio | fronteras precisas (cruces de umbral, ±1 marco) |
+| `band_energies`, `centroid`, `flatness`, `peak_flux` | rasgos de entrada; funciones deterministas del audio | — |
+| `aci`, `bio`, `ndsi`, `adi`, `aei` | rasgos de entrada; publicados y comparables entre estudios | — |
+| `dominant_band` | una etiqueta gruesa confiable — es solo un argmax sobre energía medida | identidad de especie |
+| `domain` | una etiqueta débil defendible de 4 clases | verdad de referencia donde dominan las transiciones |
+| `role` | una **hipótesis** de umbrales ajustados a mano | objetivo de entrenamiento sin verificación humana |
+| `confidence` | una constante asignada a mano por rama de regla | una probabilidad calibrada |
+| `certainty` | un nivel de triaje — qué roles merecen tiempo humano | evidencia en sí misma |
 
-That last row matters: `confidence` is not learned or estimated. Each rule returns a fixed number the author assigned to it (0.8 for a dawn chorus match, 0.3 for a fallback). It ranks rules by how specific they are — nothing more.
+Esa última fila importa: `confidence` no se aprende ni se estima. Cada regla devuelve un número fijo que el autor le asignó (0.8 para una coincidencia de coro del amanecer, 0.3 para un respaldo). Ordena las reglas según cuán específicas son, nada más.
 
-### `events.json` schema
+### Esquema de `events.json`
 
-One file per recording, media paths relative to that file's directory.
+Un archivo por grabación, con rutas de medios relativas al directorio de ese archivo.
 
 ```jsonc
 {
   "filename": "20250310_053000.WAV",
-  "recording_datetime": "2025-03-10T05:30:00",   // null if unparseable
+  "recording_datetime": "2025-03-10T05:30:00",   // null si no se puede interpretar
   "duration_s": 100.0,
   "sample_rate": 48000,
-  "habitat": "Lagunas, lagos y ciénagas naturales",  // from directory name
+  "habitat": "Lagunas, lagos y ciénagas naturales",  // del nombre del directorio
   "season": "Época lluvias",
-  "temperature_c": 24.5,                          // AudioMoth header, may be null
-  "indices":   { "aci": …, "bio": …, "ndsi": …, "adi": …, "aei": … },  // whole recording
-  "band_energies": { "geophony": …, "biophony_low": … },               // event mean
+  "temperature_c": 24.5,                          // cabecera AudioMoth, puede ser null
+  "indices":   { "aci": …, "bio": …, "ndsi": …, "adi": …, "aei": … },  // grabación completa
+  "band_energies": { "geophony": …, "biophony_low": … },               // media por evento
   "parliament": { "total_voices": …, "domain_percentages": {…},
                   "role_counts": {…}, "democracy_index": …,
                   "niche_partitioning": … },
@@ -829,21 +837,21 @@ One file per recording, media paths relative to that file's directory.
   "events": [{
     "event_index": 3,
     "onset_s": 40.8, "offset_s": 45.8, "duration_s": 5.0,
-    "clip_start_s": 20.8, "clip_end_s": 55.8,   // includes pre/post-roll
+    "clip_start_s": 20.8, "clip_end_s": 55.8,   // incluye margen previo/posterior
     "peak_flux": …, "mean_flux": …,
-    "centroid": 5412.0,        // Hz, magnitude-weighted, whole-spectrum
-    "flatness": 0.081,         // 0-1, whole-spectrum
-    "band_energies": { … },    // per band, this event's frames only
-    "band_crest": 35.1,        // within-band peak/mean — see docs/CALIBRATION.md
-    "band_entropy": 0.27,      // within-band spread, 0-1
-    "band_centroid": 1240.0,   // Hz, within the dominant band only
-    "periodicity": 0.47,       // modulation within the event, 0-1
+    "centroid": 5412.0,        // Hz, ponderado por magnitud, espectro completo
+    "flatness": 0.081,         // 0-1, espectro completo
+    "band_energies": { … },    // por banda, solo los marcos de este evento
+    "band_crest": 35.1,        // pico/media dentro de la banda — ver docs/CALIBRACION.md
+    "band_entropy": 0.27,      // dispersión dentro de la banda, 0-1
+    "band_centroid": 1240.0,   // Hz, solo dentro de la banda dominante
+    "periodicity": 0.47,       // modulación dentro del evento, 0-1
     "pulse_rate_hz": 15.6,
-    "context_periodicity": 0.06,  // modulation over a 4s window around it
-    "context_rate_hz": 1.2,       // RECORDED BUT NOT YET USED TO CLASSIFY
+    "context_periodicity": 0.06,  // modulación en una ventana de 4s alrededor
+    "context_rate_hz": 1.2,       // REGISTRADO PERO AÚN NO USADO PARA CLASIFICAR
     "role": "dawn_chorus_participant",
     "domain": "biophony",
-    "confidence": 0.8,         // fixed per rule — see caveat above
+    "confidence": 0.8,         // fijo por regla — ver la salvedad arriba
     "dominant_band": "biophony_mid",
     "reasoning": "Mid-frequency activity during dawn hours (h=5)",
     "aci": …, "bio": …, "ndsi": …, "adi": …, "aei": …,
@@ -854,99 +862,101 @@ One file per recording, media paths relative to that file's directory.
 }
 ```
 
-`phenological_series.csv` is one row per day: the raw fields, then `cv_*` copies of each scaled to 0–1 across the dataset. `phenological_calendar.json` holds the same frames plus the detected phases and the normalization ranges used.
+`phenological_series.csv` trae una fila por día: los campos crudos y luego copias `cv_*` de cada uno escaladas a 0–1 sobre el conjunto. `phenological_calendar.json` guarda los mismos marcos más las fases detectadas y los rangos de normalización usados.
 
-### Known biases to design around
+### Sesgos conocidos que hay que tener en cuenta
 
-1. **Detection is change-driven, not presence-driven.** A cicada that sings continuously for an hour produces one event at onset and nothing after. Absence of events is not absence of sound — it is absence of *change*. Any model trained on these clips inherits a sampling bias toward onsets and transitions.
-2. **Transition rules pre-empt content rules.** The first event of a new regime is labelled `silence_to_activity` or `activity_to_silence` regardless of source. In the verification corpus that swallowed most rain onsets.
-3. **Some roles never fire at current thresholds.** `rain_event`, `wind_event`, `water_flow`, `mechanical_intrusion` and `aircraft_passage` were emitted zero times across 45 events, for the feature reasons documented earlier. Do not read a zero count as an absence of rain.
-4. **Diel rules depend on a correct clock.** Roles keyed to hour-of-day are only as good as the AudioMoth's timestamp, and the wrong timezone silently relabels a dawn chorus as nocturnal.
-5. **Class imbalance is severe and site-specific.** 11 of 45 events in the test corpus were one role.
-6. **Ultrasound is absent unless asked for.** Anything trained on default-mode output has never seen a bat.
+1. **La detección responde al cambio, no a la presencia.** Una chicharra que canta continuamente durante una hora produce un evento al inicio y nada después. La ausencia de eventos no es ausencia de sonido: es ausencia de *cambio*. Cualquier modelo entrenado con estos clips hereda un sesgo de muestreo hacia inicios y transiciones.
+2. **Las reglas de transición tienen prioridad sobre las de contenido.** El primer evento de un régimen nuevo se etiqueta `silence_to_activity` o `activity_to_silence` sin importar la fuente. En el corpus de verificación eso se tragó la mayoría de los inicios de lluvia.
+3. **Algunos roles nunca se disparan con los umbrales actuales.** `rain_event`, `wind_event`, `water_flow`, `mechanical_intrusion` y `aircraft_passage` se emitieron cero veces en 45 eventos, por las razones de los rasgos documentadas antes. No lea un conteo en cero como ausencia de lluvia.
+4. **Las reglas dieles dependen de un reloj correcto.** Los roles anclados a la hora del día valen lo que valga la marca temporal del AudioMoth, y una zona horaria equivocada reetiqueta en silencio un coro del amanecer como nocturno.
+5. **El desbalance de clases es severo y específico del sitio.** 11 de 45 eventos del corpus de prueba correspondieron a un solo rol.
+6. **El ultrasonido está ausente si no se pide.** Cualquier cosa entrenada con la salida por defecto nunca ha visto un murciélago.
 
-### A reasonable path to a trained model
+### Un camino razonable hacia un modelo entrenado
 
-1. Run detection at `--sensitivity subtle` to over-segment — better to discard than to miss.
-2. Use `dominant_band` and the numeric features as the trustworthy layer; treat `role` as a pre-sort for annotation, not a label.
-3. Have a human verify clips in gallery order — grouping by role means an annotator confirms or rejects one hypothesis at a time, which is much faster than labelling from scratch.
-4. Calibrate the thresholds at the top of `classifier.py` against those verified labels; re-running detection is cheap compared with re-annotating.
-5. Keep the phenological CSV as a **held-out validation signal** — a model that cannot reproduce a known dry-to-wet transition is not modelling the site.
+1. Correr la detección con `--sensitivity subtle` para sobre-segmentar: es mejor descartar que perder.
+2. Usar `dominant_band` y los rasgos numéricos como la capa confiable; tratar `role` como un preordenamiento para anotar, no como etiqueta.
+3. Que una persona verifique los clips en el orden de la galería: agrupar por rol hace que quien anota confirme o rechace una hipótesis a la vez, mucho más rápido que etiquetar desde cero.
+4. Calibrar los umbrales del inicio de `classifier.py` contra esas etiquetas verificadas; volver a correr la detección es barato frente a volver a anotar.
+5. Conservar el CSV fenológico como **señal de validación reservada**: un modelo que no puede reproducir una transición seca–lluvias conocida no está modelando el sitio.
+
+El protocolo completo está en [docs/CALIBRACION.md](docs/CALIBRACION.md).
 
 ---
 
-## Package layout
+## Estructura del paquete
 
 ```
-bioacoustics.sh          Single entry point — wizard, or any subcommand
-detect_events.sh         Direct access to the detect pipeline
+bioacoustics.sh          Punto de entrada único — asistente, o cualquier subcomando
+detect_events.sh         Acceso directo al pipeline de detección
 
 bioacoustic_detector/
-  wizard.py              Guided front-end to every feature
-  cli.py                 Subcommands and argument parsing
-  pipeline.py            The stage chain, per file and per batch
-  config.py              Every tunable parameter, plus sensitivity presets
-  spectral.py            STFT, flux, centroid, flatness, band energies
-  detector.py            Adaptive-threshold event detection
-  classifier.py          Deep ecology taxonomy
+  wizard.py              Interfaz guiada a todas las funciones
+  cli.py                 Subcomandos y análisis de argumentos
+  pipeline.py            La cadena de etapas, por archivo y por lote
+  config.py              Todos los parámetros ajustables y los preajustes
+  spectral.py            STFT, flujo, centroide, planitud, energías por banda
+  detector.py            Detección de eventos por umbral adaptativo
+  classifier.py          Taxonomía desde la ecología profunda
   indices.py             ACI, BIO, NDSI, ADI, AEI
-  clipper.py             Clip extraction, event filters, role-based filing
-  video.py               Event clip videos, posters, GIFs, per-type reels
-  media.py               ffmpeg plumbing; video split and GIF conversion
-  gallery.py             Event-clip gallery with lightbox and GPS tagging
-  phenology.py           Calendar, OSC frames, CSV, HTML
-  osc_output.py          OSC messages, bundles, SuperCollider scores, streaming
-  osc_server.py          Bidirectional OSC query server
-  metadata.py            AudioMoth metadata; habitat/season from paths
-  report.py              Per-recording and batch HTML reports
-  store.py               events.json read/write with portable paths
+  clipper.py             Extracción de clips, filtros y archivado por rol
+  video.py               Videos por clip, fijas, GIFs, reels por tipo
+  media.py               Plomería de ffmpeg; partir video y convertir a GIF
+  gallery.py             Galería de clips con lightbox y etiquetado GPS
+  phenology.py           Calendario, marcos OSC, CSV, HTML
+  osc_output.py          Mensajes OSC, paquetes, partituras SuperCollider, streaming
+  osc_server.py          Servidor OSC bidireccional de consultas
+  metadata.py            Metadatos AudioMoth; cobertura/época desde las rutas
+  report.py              Reportes HTML por grabación y por lote
+  store.py               Lectura/escritura de events.json con rutas portables
 ```
 
 ---
 
-## Requirements
+## Requisitos
 
-- **Python 3.10 or newer.** macOS ships 3.9 as `/usr/bin/python3`; the launcher searches for a newer interpreter and rebuilds its virtualenv if it finds an older one. Install with `brew install python@3.12` if needed.
-- **ffmpeg** — optional but needed for spectrogram video, stills and GIFs. Without it you still get clips, `events.json`, OSC exports, the calendar and the reports; the pipeline says so and carries on. `brew install ffmpeg`.
-- **A drawtext-capable ffmpeg**, if you want captions burned into the clip videos. Homebrew's stock `ffmpeg` bottle is built without libfreetype and therefore has no `drawtext` filter, so labels are silently unavailable — spectrogram, legend, colours and audio are unaffected. `brew install ffmpeg-full` provides it; the toolkit prefers that build automatically, or set `FFMPEG_BIN=/path/to/ffmpeg` to choose your own.
-- Python packages (installed automatically into the managed venv): `numpy`, `scipy`, `soundfile`, `metamoth`, `python-osc`.
-- **Optional:** `alp-data` (Python 3.11+), only for `./bioacoustics.sh validate`. Nothing else imports it, and the command tells you how to install it if missing.
+- **Python 3.10 o superior.** macOS trae 3.9 como `/usr/bin/python3`; el lanzador busca un intérprete más nuevo y reconstruye su entorno virtual si encuentra uno más viejo. Instálelo con `brew install python@3.12` si hace falta.
+- **ffmpeg** — opcional, pero necesario para video de espectrograma, imágenes fijas y GIFs. Sin él igual se obtienen clips, `events.json`, exportaciones OSC, el calendario y los reportes; el pipeline lo dice y continúa. `brew install ffmpeg`.
+- **Un ffmpeg con `drawtext`**, si quiere leyendas incrustadas en los videos. El paquete estándar de Homebrew se compila sin libfreetype y por tanto no tiene el filtro `drawtext`, así que las leyendas quedan silenciosamente indisponibles — el espectrograma, la leyenda de ejes, los colores y el audio no se ven afectados. `brew install ffmpeg-full` lo provee; la herramienta prefiere esa compilación automáticamente, o defina `FFMPEG_BIN=/ruta/a/ffmpeg` para elegir la suya.
+- Paquetes de Python (instalados automáticamente en el entorno gestionado): `numpy`, `scipy`, `soundfile`, `metamoth`, `python-osc`.
+- **Opcional:** `alp-data` (Python 3.11+), solo para `./bioacoustics.sh validate`. Ningún otro módulo lo importa, y el comando indica cómo instalarlo si falta.
 
-`./bioacoustics.sh doctor` reports on all of the above.
+`./bioacoustics.sh doctor` informa sobre todo lo anterior.
 
 ---
 
-## Troubleshooting
+## Solución de problemas
 
 **"Python 3.10 or newer is required but was not found."**
-Install a newer interpreter (`brew install python@3.12`) and run again. The launcher searches `python3.14` down to `python3.10`, then `python3`, and also looks inside `/opt/homebrew/bin` and `/usr/local/bin` in case Homebrew is not on your `PATH`. It will not use macOS's system 3.9.
+Instale un intérprete más nuevo (`brew install python@3.12`) y vuelva a ejecutar. El lanzador busca desde `python3.14` hasta `python3.10`, luego `python3`, y también revisa `/opt/homebrew/bin` y `/usr/local/bin` por si Homebrew no está en su `PATH`. No usará el 3.9 del sistema de macOS.
 
-**Videos render but carry no caption.**
-Your ffmpeg has no `drawtext` filter — it was built without libfreetype, which is the case for Homebrew's current stock bottle. `./bioacoustics.sh doctor` shows which filters your build has. The clip's role, confidence, band, habitat and date are still in the filename, the gallery card, the report and `events.json`; only the burned-in text is missing. To get it:
+**Los videos se renderizan pero no traen leyenda.**
+Su ffmpeg no tiene el filtro `drawtext`: se compiló sin libfreetype, que es el caso del paquete estándar actual de Homebrew. `./bioacoustics.sh doctor` muestra qué filtros trae su compilación. El rol, la confianza, la banda, la cobertura y la fecha del clip siguen estando en el nombre del archivo, en la tarjeta de la galería, en el reporte y en `events.json`; lo único que falta es el texto incrustado. Para obtenerlo:
 
 ```bash
-brew install ffmpeg-full     # keg-only; the toolkit finds and prefers it
-# or
-export FFMPEG_BIN=/path/to/an/ffmpeg-with-drawtext
+brew install ffmpeg-full     # keg-only; la herramienta lo encuentra y lo prefiere
+# o
+export FFMPEG_BIN=/ruta/a/un/ffmpeg-con-drawtext
 ```
 
-**No spectrogram videos appeared.**
-ffmpeg is missing — the run says so as it goes and produces everything else. Install it and re-run `detect` on the same input: media is rendered during detection, so there is no separate render step to resume. The clips and JSON from the first pass are simply overwritten.
+**No apareció ningún video de espectrograma.**
+Falta ffmpeg: la corrida lo advierte sobre la marcha y produce todo lo demás. Instálelo y vuelva a correr `detect` sobre la misma entrada: los medios se renderizan durante la detección, así que no hay un paso de renderizado aparte que retomar. Los clips y el JSON de la primera pasada simplemente se sobrescriben.
 
 **"No WAV files found in: …"**
-The path is checked as given, relative to where you are standing (not to the repo). Quote paths containing spaces or accents: `./detect_events.sh "Epoca lluvias/Bosque de galería y-o ripario/"`. Both `.WAV` and `.wav` are found, recursively.
+La ruta se evalúa tal como se escribe, relativa a donde usted está parado (no al repositorio). Entrecomille rutas con espacios o tildes: `./detect_events.sh "Epoca lluvias/Bosque de galería y-o ripario/"`. Se encuentran tanto `.WAV` como `.wav`, de forma recursiva.
 
-**Too many or too few events.**
-Start with `--sensitivity subtle | balanced | salient`, and only reach for `--threshold` (MAD units — lower is more sensitive) if the presets do not land where you want. `--min-event-duration` discards brief blips; `--merge-gap` decides how far apart two triggers must be to count as separate events. Probe with `--json-only` first — same analysis, none of the rendering. See [Event detection](#event-detection) for what κ actually measures.
+**Demasiados o muy pocos eventos.**
+Empiece con `--sensitivity subtle | balanced | salient`, y recurra a `--threshold` (unidades MAD — más bajo es más sensible) solo si los preajustes no dan en el punto. `--min-event-duration` descarta destellos breves; `--merge-gap` decide qué tan separados deben estar dos disparos para contar como eventos distintos. Explore primero con `--json-only`: el mismo análisis, sin nada del renderizado. Ver [Detección de eventos](#detección-de-eventos) para qué mide κ realmente.
 
 **"Only one recording — the calendar needs several to compare."**
-Phenology is a cross-recording product. It needs recordings from at least two different days, each carrying a parseable timestamp — either an AudioMoth `YYYYMMDD_HHMMSS.WAV` filename or intact AudioMoth metadata. The run reports how many of your files have usable timestamps.
+La fenología es un producto entre grabaciones. Necesita grabaciones de al menos dos días distintos, cada una con una marca temporal interpretable: un nombre AudioMoth `YYYYMMDD_HHMMSS.WAV` o metadatos AudioMoth intactos. La corrida informa cuántos de sus archivos tienen marcas temporales utilizables.
 
-**Nothing arrives at the instrument.**
-Check the target with `--host` and `--port` (default `127.0.0.1:57120`, SuperCollider's default). `osc serve` listens on `--listen-port` (default 57121) and *replies* to `--host`/`--port`, which can be redirected at runtime by sending `/phenology/query/reply_port <int>`. `cat osc_address_map.txt` for the exact addresses your results emit.
+**No llega nada al instrumento.**
+Verifique el destino con `--host` y `--port` (por defecto `127.0.0.1:57120`, el de SuperCollider). `osc serve` escucha en `--listen-port` (57121 por defecto) y *responde* a `--host`/`--port`, que puede redirigirse en tiempo de ejecución enviando `/phenology/query/reply_port <int>`. Haga `cat osc_address_map.txt` para ver las direcciones exactas que emiten sus resultados.
 
-**A gallery link opens nothing.**
-Media paths inside `events.json` are stored relative to each recording's folder, so the whole output tree can be moved or published as a unit — but moving `gallery.html` on its own breaks its links. Regenerate it in place with `./bioacoustics.sh gallery <output_dir>`.
+**Un enlace de la galería no abre nada.**
+Las rutas de medios dentro de `events.json` se guardan relativas a la carpeta de cada grabación, de modo que todo el árbol de salida puede moverse o publicarse como una unidad — pero mover `gallery.html` por separado rompe sus enlaces. Regenérela en su sitio con `./bioacoustics.sh gallery <carpeta_de_salida>`.
 
-**An old script printed a note about a new command.**
-That's expected. The seven retired scripts still work; they forward to the pipeline and name their replacement. See [Replaced scripts](#replaced-scripts).
+**Un script viejo imprimió una nota sobre un comando nuevo.**
+Es lo esperado. Los siete scripts retirados siguen funcionando; reenvían al pipeline y nombran su reemplazo. Ver [Scripts reemplazados](#scripts-reemplazados).
