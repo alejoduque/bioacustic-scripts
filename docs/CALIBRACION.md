@@ -336,6 +336,26 @@ Dos sesgos estructurales sobreviven a cualquier calibración de umbrales y deben
 
 ---
 
+## La escala de frecuencia del espectrograma, medida (2026-08-01)
+
+La imagen es evidencia, así que cómo mapea frecuencia a píxeles hay que saberlo, no suponerlo. ffmpeg no documenta la curva detrás de `fscale=log` en `showspectrum`, así que se midió: se renderizaron tonos puros a frecuencias conocidas y se leyó en qué fila caía cada uno, con varios tamaños de ventana y tanto para `showspectrum` como para `showspectrumpic` (idénticos a 0.0 px).
+
+```
+y = ln((f − start) / 20) / ln((stop − start) / 20)        y = 0 abajo
+```
+
+El piso de 20 Hz es fijo, no se deriva de `start`: en tres rangos sin relación entre sí, el fondo del gráfico cayó en 20.05, 19.95 y 20.81 Hz. La fórmula también reproduce exactamente la leyenda que imprime ffmpeg — su marca más baja es `start + 20`, y la razón entre marcas sucesivas coincidió con cuatro cifras significativas.
+
+**Dos consecuencias que vale la pena registrar.**
+
+1. **`fscale=log` no es un eje logarítmico en frecuencia.** Es logarítmico en `f − start`, que es mucho más agresivo. Con `start=2000, stop=56568` la *mitad* inferior del cuadro cubre apenas 2000–3043 Hz. Una ronda anterior de comentarios sobre que el extremo bajo se veía como una mancha desenfocada se diagnosticó como problema de mapa de color; no lo era. Era esto. Pasar `start=0` y recortar la parte superior de un render más alto da un eje log verdadero sobre la banda deseada, y es lo que hace ahora el renderizador de clips.
+
+2. **La altura de render debe tener un tamaño de FFT compuesto.** `showspectrum` transforma el doble de la altura del gráfico y se cae por un acantilado cuando ese número tiene factores primos grandes. La altura 1517 (2 × 37 × 41) tomó **16 s de CPU por cada 2 s de audio**; las alturas 1512 y 1536, a cada lado, tomaron 0.3 s. Un cambio de 1 % en la altura, un cambio de 50× en el costo. Las alturas de render se ajustan a números de la forma 2^a·3^b·5^c.
+
+Un tercer hallazgo, ajeno a la corrección pero no al costo: `showspectrum` emite un cuadro por columna de FFT, lo que significaba que los videos de clip se escribían a 324 fps — un clip de 20 segundos eran 6487 cuadros, cada uno codificado y cada uno cargando todas las capas de texto. Limitar la salida a 30 fps y elegir el solapamiento de ventana a propósito llevó el render de un clip de 8 minutos extrapolados a 3 segundos.
+
+---
+
 ## Secuencia cuando lleguen las grabaciones
 
 1. Inventario: frecuencias de muestreo, rango de fechas, coberturas, ciclo de trabajo, consistencia de reloj y zona horaria → determina si el Asunto 1 ya quedó resuelto por lo que se grabó.

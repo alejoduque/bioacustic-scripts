@@ -215,6 +215,11 @@ class TextOverlay:
     border_width: int = 1
     border_color: str = "black"
     line_spacing: int = 6
+    # Overlays are literal by default: without expansion=none drawtext reads
+    # '%' as the start of a %{...} sequence and silently drops the whole label.
+    # The running clock is the one exception, since it needs %{pts}, and it is
+    # the only overlay whose text this module writes rather than the caller.
+    expansion: str = "none"
 
 
 class OverlayTexts:
@@ -237,11 +242,11 @@ class OverlayTexts:
         path.write_text(overlay.text, encoding="utf-8")
         parts = [
             f"drawtext=textfile={path}",
-            # Our overlays are always literal. Without expansion=none, drawtext
-            # reads '%' as the start of a %{...} sequence and silently drops the
-            # entire label — "Dawn Chorus (80%)" renders as nothing at all, and
-            # ffmpeg still exits 0.
-            "expansion=none",
+            # Literal unless the caller asks otherwise. With expansion left on,
+            # drawtext reads '%' as the start of a %{...} sequence and silently
+            # drops the entire label — "Dawn Chorus (80%)" renders as nothing
+            # at all, and ffmpeg still exits 0.
+            f"expansion={overlay.expansion}",
             "reload=0",
             f"x={overlay.x}",
             f"y={overlay.y}",

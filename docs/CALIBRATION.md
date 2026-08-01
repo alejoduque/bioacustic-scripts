@@ -325,6 +325,26 @@ Two structural biases survive any threshold calibration and must be stated in an
 
 ---
 
+## The spectrogram's frequency scale, measured (2026-08-01)
+
+The picture is evidence, so how it maps frequency to pixels has to be known rather than assumed. ffmpeg does not document the curve behind `showspectrum`'s `fscale=log`, so it was measured: pure tones were rendered at known frequencies and their pixel rows read back, at several window sizes and both for `showspectrum` and `showspectrumpic` (identical to 0.0 px).
+
+```
+y = ln((f − start) / 20) / ln((stop − start) / 20)        y = 0 at the bottom
+```
+
+The 20 Hz floor is fixed, not derived from `start`: across three unrelated ranges the bottom of the plot landed at 20.05, 19.95 and 20.81 Hz. The formula also reproduces ffmpeg's own printed legend exactly — its lowest tick is `start + 20`, and the ratio between successive ticks matched to four significant figures.
+
+**Two consequences worth recording.**
+
+1. **`fscale=log` is not a log frequency axis.** It is logarithmic in `f − start`, which is far more aggressive. With `start=2000, stop=56568` the bottom *half* of the frame covers only 2000–3043 Hz. An earlier round of feedback about the low end looking like an unfocused wash was diagnosed as a colormap problem; it was not. It was this. Passing `start=0` and cropping the top of a taller render gives a true log axis over the wanted band, and is what the clip renderer now does.
+
+2. **Render height must have a smooth FFT size.** `showspectrum` transforms twice the plot height and falls off a cliff when that number has large prime factors. Height 1517 (2 × 37 × 41) took **16 s of CPU per 2 s of audio**; heights 1512 and 1536 either side of it took 0.3 s. A 1 % change in height, a 50× change in cost. Render heights are snapped to numbers of the form 2^a·3^b·5^c.
+
+A third finding, unrelated to correctness but not to cost: `showspectrum` emits one frame per FFT column, which meant clip videos were being written at 324 fps — a 20-second clip was 6487 frames, each one encoded and each one carrying every text overlay. Capping output at 30 fps and choosing window overlap deliberately took one clip's render from an extrapolated 8 minutes to 3 seconds.
+
+---
+
 ## Sequence once recordings arrive
 
 1. Inventory: sample rates, date range, habitats, duty cycle, clock/timezone sanity → decides whether Item 1 is already fixed by what was recorded.

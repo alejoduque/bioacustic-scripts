@@ -62,13 +62,14 @@ def video_config_for(config: Config, sample_rate: int) -> VideoConfig:
     to Nyquist would squash the interesting part into the bottom sliver.
 
     In ultrasonic mode the axis has to reach Nyquist or the bats are simply not
-    on the picture, and it switches to a logarithmic frequency scale so that
-    0-10 kHz still occupies a readable share of a 0-96 kHz plot.
+    on the picture. The frequency scale is logarithmic either way: octaves get
+    equal height, which is how a spectrogram is read.
     """
     nyquist = sample_rate // 2
     if not config.ultrasonic:
-        return replace(config.video, max_freq=min(config.video.max_freq, nyquist))
-    return replace(config.video, max_freq=nyquist, freq_scale="log")
+        return replace(config.video, source_rate=sample_rate,
+                       max_freq=min(config.video.max_freq, nyquist))
+    return replace(config.video, source_rate=sample_rate, max_freq=nyquist)
 
 
 def find_wav_files(paths: str | list[str]) -> list[str]:

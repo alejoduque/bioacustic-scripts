@@ -160,25 +160,26 @@ Every rendered clip encodes four independent channels of information. Nothing is
 
 Text is white with a 1-pixel black outline and no filled box, so it stays legible over any colormap without hiding the spectrogram beneath it — and so that colour in the frame means exactly one thing: the acoustic domain.
 
-### The caption separates measurement from inference
+### The ticker separates measurement from inference
 
-The bottom row carries two different kinds of claim, on opposite sides, so they are never read as one statement:
+**Measured — the ticker.** A semi-opaque band across the bottom of the spectrogram carries everything known about the clip in four labelled lines:
 
 ```
-unclassified                    geophony  15.2 kHz  0.3s  NDSI -0.58  ACI 235
-candidate: insect chorus (40%)  ultrasonic mid  27.7 kHz  5.8s  13 Hz pulse  NDSI +0.78  ACI 327
-probable: dawn chorus participant (80%)   biophony mid  5.4 kHz  5.0s  NDSI +1.00  ACI 446
+SITE Lagunas, lagos y ciénagas naturales · Carolina · AU-MAM-10 · 8.49219 -75.59638 · 109 m · Época lluvias · 2024-07-28 21:00:00 · 24E1440163ED0711 · 26.0 C · 384 kHz · 4.70 V
+VOX  nocturnal voice + insect chorus [candidate 44%] · onset 0.01 s · length 59.98 s
+MEAS biophony mid 35% · biophony high 34% · ultrasonic low 29% · centroid 24.44 kHz · in-band 7.05 kHz · crest 2.8 · entropy 0.612 · pulse 18.1 Hz
+IDX  ACI 231.9 · BIO 171.7 · NDSI +0.991 · ADI 2.303 · AEI 0.000 · view 2.1K-57K · -72..0 dBFS
 ```
 
-**Right — measured.** A metadata column padded onto the frame carries everything known about the clip, in four groups: **SITE** (station id, locality, latitude, longitude, elevation, land cover, season), **RECORDER** (device id, date, time, temperature, sample rate, battery), **EVENT** (onset, length, band shares, centroid, in-band centroid, crest, entropy, pulse rate) and **INDICES** (ACI, BIO, NDSI, ADI, AEI). All of it measured or surveyed.
+`VOX` is the only line that claims anything; the other three are survey facts, recorder facts, or numbers computed from the audio. This used to be a column down the right-hand side, which forced every value onto its own row: it needed thirty of them and still broke land-cover names mid-word. Laid out along the frame it fits in four. `--no-ticker` removes it.
 
 Coordinates come from the survey's GIS layer, not the recorder: `sites.py` reads a KML of sampling points and matches each recording to its station by land cover and date. Without such a layer those lines are simply absent.
 
-The plot itself starts at **200 Hz** rather than 0 — below that a field recording carries rumble, wind on the case and DC drift, and on a log axis that dead range ate a third of the height. It is also bracketed around every band the event actually carried (union of all bands holding ≥10% of its energy — see the multi-label mix below), widened by a small octave margin (one down, half up) for a little breathing room. Bracketing around only the single dominant band, with generous margins to compensate, used to leave a wide dead stretch of low frequencies with nothing in it; the union already spans the activity, so the margin doesn't need to manufacture context. `--no-focus` restores the full range, `--min-freq` moves the floor.
+**One typeface, one size, uppercase.** Every glyph burned into the frame is drawn by the toolkit at 11px in Monaco. This was previously impossible: `showspectrum`'s legend (the frequency numbers, `TIME`, the dBFS bar) is written by ffmpeg in a bitmap font compiled into libavfilter, which cannot be loaded as a file — so keeping it meant permanently mixing two typefaces. The legend is now disabled and the frequency axis drawn here, which is only possible because exactly where each frequency lands was measured (see [docs/CALIBRATION.md](docs/CALIBRATION.md)). The `T +12s` clock at top right replaces the TIME axis that went with it.
 
-The biophony colormap changed from `green` to `plasma` (purple → orange → yellow): a single-hue map like `green` has almost no perceptual contrast in the low-energy half of the frame, which read as an out-of-focus blur there. With `plasma` an energy change shows up as a hue shift well before a pixel goes fully dark. Controlled per domain in `VideoConfig.domain_colors` (ffmpeg's `showspectrum` colormaps).
+**The axis is now actually logarithmic.** ffmpeg's `fscale=log` is not logarithmic in frequency but in `f − start`, which is far more aggressive: with the pond's window, the bottom half of the frame covered only 2000–3043 Hz. That — not the colormap — was the real cause of the low end reading as an unfocused wash. Rendering with `start=0` and cropping the top of a taller frame spreads the octaves evenly. The window still brackets every band the event actually carried (union of all bands holding ≥10% of its energy), with a one-octave margin below and half an octave above. `--no-focus` restores the full range, `--min-freq` moves the floor.
 
-Header, date and caption now share one size (13px) instead of three similar ones (16/15/16): any gap between them and the column read as a second typeface, because a fixed 1-pixel outline is proportionally thicker on smaller glyphs — the same face at two sizes looks like two different weights. The metadata column dropped from 13px to 11px, since it's dense reference text rather than a label meant to be read at a glance. (10px and below made the whole column vanish — some drawtext/freetype combination on Monaco.ttf breaks outright at that size instead of degrading gracefully; 11px is the smallest that reliably renders.)
+The biophony colormap is `plasma` (purple → orange → yellow) rather than `green`: a single-hue map has almost no perceptual contrast in the low-energy half of the frame. Controlled per domain in `VideoConfig.domain_colors`.
 
 **Left — inferred.** Every voice the event carries, joined with `+`, then how far the claim goes:
 

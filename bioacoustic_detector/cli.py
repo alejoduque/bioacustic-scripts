@@ -134,8 +134,8 @@ def _add_detect_parser(sub) -> None:
     m.add_argument("--min-freq", type=int, default=200,
                    help="Bottom of the spectrogram in Hz (default: 200 — below "
                         "that a field recording carries rumble, not signal)")
-    m.add_argument("--no-metadata-column", action="store_true",
-                   help="Omit the metadata column padded onto the right")
+    m.add_argument("--no-ticker", action="store_true",
+                   help="Omit the metadata ticker along the bottom of the frame")
     m.add_argument("--no-gallery", action="store_true",
                    help="Skip the HTML event gallery")
     m.add_argument("--json-only", action="store_true",
@@ -308,7 +308,7 @@ def config_from_detect_args(args: argparse.Namespace) -> Config:
             max_freq=args.max_freq,
             min_freq=args.min_freq,
             focus_on_event=not args.no_focus,
-            metadata_column_px=0 if args.no_metadata_column else 360,
+            show_ticker=not args.no_ticker,
             style_by_domain=not args.no_style_by_domain,
         ),
         phenology=PhenologyConfig(write_csv=not args.no_csv),

@@ -127,10 +127,11 @@ class VideoConfig:
     with per-domain colormaps layered on top so event types are visually
     distinguishable at a glance.
     """
-    # Size of the spectrogram area. With legend=enable ffmpeg pads axes, labels
-    # and the dBFS bar around it, so these defaults yield a 1280x720 file.
-    width: int = 996
-    height: int = 592
+    # Size of the finished frame. The spectrogram now fills it: ffmpeg's legend
+    # is disabled for clip videos and the axis is drawn as overlays, so nothing
+    # is padded around the plot.
+    width: int = 1280
+    height: int = 720
     dynamic_range: int = 72
     max_freq: int = 10000
     # Below roughly 200 Hz a field spectrogram carries rumble, wind on the
@@ -151,11 +152,17 @@ class VideoConfig:
     focus_margin_octaves_up: float = 0.5
     focus_margin_octaves_down: float = 1.0
 
-    # Width in pixels of the metadata column padded onto the right of the
-    # frame. 0 removes the column.
-    metadata_column_px: int = 360
-    freq_scale: str = "lin"
+    freq_scale: str = "log"
     gain_scale: str = "log"
+    # showspectrum emits one frame per FFT column, which at these window sizes
+    # means 120-320 fps: a 20-second clip came out as 6487 frames, every one of
+    # them encoded and every text overlay drawn onto each. Capping the rate is
+    # the single biggest saving in the render, and no one can see a spectrogram
+    # scroll faster than this anyway.
+    video_fps: int = 30
+    # Sample rate of the recording being rendered, so the video branch can be
+    # resampled down to what the plot actually shows. 0 leaves it alone.
+    source_rate: int = 0
     color: str = "cool"          # fallback when style_by_domain is False
     slide: str = "scroll"
     legend: str = "enable"
@@ -173,22 +180,25 @@ class VideoConfig:
         "transition": "magma",
     })
 
-    # Text overlays
+    # Text overlays. Every burned-in glyph shares one face at one size: any
+    # difference in either reads as a second typeface, because a fixed 1-pixel
+    # outline is proportionally thicker on smaller glyphs, so the same font at
+    # two sizes looks like two weights. 10px and below makes drawtext drop the
+    # text entirely on Monaco.ttf rather than degrade, so 11 is the floor.
     overlay_text: bool = True
     font_file: str = ""          # auto-detected when empty
-    # Header/date/caption share one size on purpose: any gap between them and
-    # the column reads as a second typeface, because a fixed 1-pixel outline
-    # is proportionally thicker on smaller glyphs — the same face at two
-    # sizes looks like two different weights. The column stays smaller since
-    # it is dense reference text, not a label meant to be read at a glance.
-    header_font_size: int = 13
-    date_font_size: int = 13
-    label_font_size: int = 13
-    # 10px and below made the whole column vanish — some drawtext/freetype
-    # combination on Monaco.ttf breaks at that size instead of degrading
-    # gracefully. 11 is the smallest that reliably renders.
-    column_font_size: int = 11
-    column_line_spacing: int = 2
+    uppercase: bool = True
+    show_ticker: bool = True
+    header_font_size: int = 11
+    date_font_size: int = 11
+    label_font_size: int = 11
+    tick_font_size: int = 11
+    ticker_font_size: int = 11
+    ticker_line_spacing: int = 3
+    # Semi-opaque, not solid: the spectrogram stays faintly visible under the
+    # ticker so it reads as part of the picture rather than a bar bolted on.
+    ticker_opacity: float = 0.66
+    ticker_pad_px: int = 12
 
     # Static poster / thumbnail (replaces make-spectrogram-thumbnail-fixed.sh)
     poster_width: int = 1280

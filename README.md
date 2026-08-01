@@ -160,27 +160,28 @@ Cada clip renderizado codifica cuatro canales de información independientes. Na
 
 El texto es blanco con un contorno negro de 1 píxel y sin caja de fondo, para que se lea sobre cualquier mapa de color sin tapar el espectrograma que hay debajo — y para que el color en el cuadro signifique exactamente una cosa: el dominio acústico.
 
-### La leyenda separa medición de inferencia
+### El ticker separa medición de inferencia
 
-La fila inferior lleva dos tipos distintos de afirmación, en lados opuestos, para que nunca se lean como una sola:
+**Medido — el ticker.** Una franja semiopaca sobre la parte baja del espectrograma lleva todo lo que se sabe del clip en cuatro líneas etiquetadas:
 
 ```
-unclassified                    geophony  15.2 kHz  0.3s  NDSI -0.58  ACI 235
-candidate: insect chorus (40%)  ultrasonic mid  27.7 kHz  5.8s  13 Hz pulse  NDSI +0.78  ACI 327
-probable: dawn chorus participant (80%)   biophony mid  5.4 kHz  5.0s  NDSI +1.00  ACI 446
+SITE Lagunas, lagos y ciénagas naturales · Carolina · AU-MAM-10 · 8.49219 -75.59638 · 109 m · Época lluvias · 2024-07-28 21:00:00 · 24E1440163ED0711 · 26.0 C · 384 kHz · 4.70 V
+VOX  nocturnal voice + insect chorus [candidate 44%] · onset 0.01 s · length 59.98 s
+MEAS biophony mid 35% · biophony high 34% · ultrasonic low 29% · centroid 24.44 kHz · in-band 7.05 kHz · crest 2.8 · entropy 0.612 · pulse 18.1 Hz
+IDX  ACI 231.9 · BIO 171.7 · NDSI +0.991 · ADI 2.303 · AEI 0.000 · view 2.1K-57K · -72..0 dBFS
 ```
 
-**Derecha — medido.** Una columna de metadatos añadida al cuadro lleva todo lo que se sabe del clip, en cuatro grupos: **SITE** (estación, vereda, latitud, longitud, elevación, cobertura, época), **RECORDER** (dispositivo, fecha, hora, temperatura, frecuencia de muestreo, batería), **EVENT** (inicio, duración, reparto de bandas, centroide, centroide en banda, cresta, entropía, tasa de pulso) e **INDICES** (ACI, BIO, NDSI, ADI, AEI). Todo medido o levantado en campo.
+`VOX` es la única línea que afirma algo; las otras tres son hechos de campo, del grabador o números calculados del audio. Antes esto era una columna a la derecha, que obligaba a cada valor a ocupar su propia fila: necesitaba treinta y aun así partía los nombres de cobertura. A lo ancho del cuadro cabe en cuatro. Se quita con `--no-ticker`.
 
 Las coordenadas provienen de la capa SIG del muestreo, no del grabador: `sites.py` lee un KML de puntos y empareja cada grabación con su estación por cobertura y fecha. Sin esa capa, esas líneas simplemente no aparecen.
 
-El gráfico arranca en **200 Hz** y no en 0: por debajo de eso una grabación de campo lleva retumbe, viento sobre la carcasa y deriva de DC, y en un eje logarítmico ese rango muerto se comía un tercio de la altura. Además se encuadra alrededor de todas las bandas que el evento realmente llevó (unión de las bandas con ≥10% de su energía — ver el reparto multi-etiqueta más abajo), ensanchado con un pequeño margen de octava (una abajo, media arriba) para dar algo de aire. Antes se encuadraba solo alrededor de la banda dominante, con márgenes generosos para compensar, y eso dejaba un tramo muerto de frecuencias bajas sin nada; la unión ya cubre la actividad, así que el margen no necesita fabricar contexto. `--no-focus` restaura el rango completo; `--min-freq` mueve el piso.
+**Una sola tipografía, un solo tamaño, mayúsculas.** Todo glifo quemado en el cuadro lo dibuja el toolkit a 11px en Monaco. Antes esto era imposible: la leyenda de `showspectrum` (números de frecuencia, `TIME`, la barra dBFS) la escribe ffmpeg con una fuente bitmap compilada dentro de libavfilter, que no se puede cargar como archivo — así que mantenerla significaba mezclar dos tipografías para siempre. Ahora la leyenda está apagada y el eje de frecuencia se dibuja aquí, lo que solo es posible porque se midió exactamente dónde cae cada frecuencia (ver [docs/CALIBRACION.md](docs/CALIBRACION.md)). El reloj `T +12s` arriba a la derecha reemplaza el eje TIME que se perdió.
 
-El color de la biofonía cambió de `green` a `plasma` (púrpura → naranja → amarillo): un mapa monocromático como `green` casi no tiene contraste perceptual en la mitad baja de energía, así que esa parte del cuadro se veía plana, como fuera de foco. Con `plasma` un cambio de energía se ve como un cambio de matiz mucho antes de que el píxel llegue a negro total. Se controla por dominio en `VideoConfig.domain_colors` (colormaps de `showspectrum` de ffmpeg).
+**El eje ahora sí es logarítmico.** El `fscale=log` de ffmpeg no es logarítmico en frecuencia sino en `f − start`, mucho más agresivo: con la ventana de la charca, la mitad inferior del cuadro cubría solo 2000–3043 Hz. Eso — no el mapa de color — era la causa real de que el extremo bajo se viera como una mancha desenfocada. Renderizando con `start=0` y recortando la parte superior de un cuadro más alto, las octavas quedan repartidas parejo. La ventana se encuadra alrededor de todas las bandas que el evento realmente llevó (unión de las bandas con ≥10% de su energía), con un margen de una octava abajo y media arriba. `--no-focus` restaura el rango completo; `--min-freq` mueve el piso.
 
-Encabezado, fecha y subtítulo ahora comparten un solo tamaño (13px) en vez de tres parecidos (16/15/16): cualquier diferencia entre ellos y la columna se leía como una segunda tipografía, porque un contorno fijo de 1 píxel es proporcionalmente más grueso en glifos pequeños — la misma fuente en dos tamaños se ve como dos pesos distintos. La columna de metadatos bajó de 13px a 11px, ya que es texto de referencia denso, no una etiqueta pensada para leerse de un vistazo. (10px y menos hacían desaparecer la columna entera — alguna combinación de drawtext/freetype con Monaco.ttf falla por completo en ese tamaño en vez de degradarse; 11px es el mínimo que renderiza de forma confiable.)
+El color de la biofonía es `plasma` (púrpura → naranja → amarillo) y no `green`: un mapa monocromático casi no tiene contraste perceptual en la mitad baja de energía. Se controla por dominio en `VideoConfig.domain_colors`.
 
-**Izquierda — inferido.** Cada voz que lleva el evento, unidas con `+`, y luego hasta dónde llega la afirmación:
+**Inferido — la línea VOX.** Cada voz que lleva el evento, unidas con `+`, y luego hasta dónde llega la afirmación:
 
 ```
 nocturnal voice + bat echolocation  [candidate 50%]
