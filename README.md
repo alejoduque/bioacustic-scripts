@@ -153,12 +153,12 @@ Cada clip renderizado codifica cuatro canales de información independientes. Na
 
 | Canal | Transporta | Definido por |
 |---|---|---|
-| **Eje vertical** | frecuencia — qué parte del espectro ocupa el sonido | `--max-freq`, o Nyquist en modo ultrasónico |
+| **Eje vertical** | frecuencia, logarítmica — octavas iguales ocupan igual altura, encuadrada a la banda del evento | `--no-focus`, `--min-freq`, `--max-freq` |
 | **Eje horizontal** | tiempo dentro del clip, desplazándose de derecha a izquierda | duración del clip = evento + margen previo/posterior |
 | **Brillo** | energía en dBFS sobre un rango de 72 dB, escala logarítmica | `dynamic_range`, `gain_scale` |
 | **Matiz (color)** | el **dominio acústico** que asignó el clasificador | `domain_colors` en `config.py` |
 
-El texto es blanco con un contorno negro de 1 píxel y sin caja de fondo, para que se lea sobre cualquier mapa de color sin tapar el espectrograma que hay debajo — y para que el color en el cuadro signifique exactamente una cosa: el dominio acústico.
+El eje de frecuencia y el reloj son texto blanco con contorno negro de 1 píxel y sin caja, para que se lean sobre cualquier mapa de color sin tapar el espectrograma. Solo el ticker lleva fondo: una caja negra al 66% que deja el espectrograma tenuemente visible por debajo, para que se lea como parte de la imagen y no como una barra atornillada. Así el color en el cuadro significa exactamente una cosa: el dominio acústico.
 
 ### El ticker separa medición de inferencia
 
@@ -229,12 +229,12 @@ muestras
   → umbral adaptativo                 mediana + 2.5 × 1.4826 × MAD, ventana causal 60 s
   → inicio/fin del evento             marcos contiguos sobre el umbral, fusionados y filtrados
   → rasgos por evento                 energías por banda, centroide, planitud, duración, índices
-  → ROL ecológico                     basado en reglas, 16 categorías      (la leyenda)
+  → ROL ecológico                     basado en reglas, 16 categorías      (la línea VOX)
   → DOMINIO acústico                  rol → {biofonía, geofonía, antrofonía, transición}
-  → MAPA DE COLOR                     dominio → {green, cool, fiery, magma}
+  → MAPA DE COLOR                     dominio → {plasma, cool, fiery, magma}
 ```
 
-El **rol** es el juicio más fino que hace el sistema, y la leyenda lo imprime con una confianza (`Dawn Chorus Participant (80%) | biophony mid`). El **dominio** es la agregación gruesa y robusta: una lluvia mal archivada como viento sigue siendo geofonía, sigue siendo azul. Por lo tanto el color es más confiable que la leyenda que lo acompaña, y esa es exactamente la razón por la que el color lleva el significado de un vistazo y la leyenda lleva el detalle.
+El **rol** es el juicio más fino que hace el sistema, y la línea `VOX` del ticker lo imprime con su certeza (`dawn chorus participant [probable 80%]`). El **dominio** es la agregación gruesa y robusta: una lluvia mal archivada como viento sigue siendo geofonía, sigue siendo azul. Por lo tanto el color es más confiable que el texto que lo acompaña, y esa es exactamente la razón por la que el color lleva el significado de un vistazo y el ticker lleva el detalle.
 
 ### Dos ejemplos trabajados
 
@@ -242,7 +242,7 @@ Son cuadros reales del corpus de verificación, y cada uno es internamente consi
 
 **Un participante del coro del amanecer, en verde.**
 
-Dos barridos recorren de 4.7 a 6.7 kHz sobre un fondo casi silencioso. La energía cae de lleno en `biophony_mid` (4–8 kHz, la banda de los paseriformes); la marca temporal de la grabación es 05:30, dentro de la ventana del amanecer de 04:00–07:00; los barridos son tonales, así que la planitud es baja. Las reglas se disparan en ese orden y producen `dawn_chorus_participant` con confianza 0.80, dominio biofonía, mapa de color verde. La leyenda dice `Dawn Chorus Participant (80%) | biophony mid`, y `NDSI +1.00` lo confirma: prácticamente toda la energía está en la banda biofónica de 2–8 kHz y nada en la banda antropogénica de 1–2 kHz.
+Dos barridos recorren de 4.7 a 6.7 kHz sobre un fondo casi silencioso. La energía cae de lleno en `biophony_mid` (4–8 kHz, la banda de los paseriformes); la marca temporal de la grabación es 05:30, dentro de la ventana del amanecer de 04:00–07:00; los barridos son tonales, así que la planitud es baja. Las reglas se disparan en ese orden y producen `dawn_chorus_participant` con confianza 0.80, dominio biofonía. La línea `VOX` dice `dawn chorus participant [probable 80%]`, y `NDSI +1.00` lo confirma: prácticamente toda la energía está en la banda biofónica de 2–8 kHz y nada en la banda antropogénica de 1–2 kHz.
 
 **Un aguacero, en magma — y por qué no se etiqueta `rain_event`.**
 
@@ -260,7 +260,7 @@ El segundo punto es una brecha de calibración que conviene conocer antes de con
 
 En el corpus de verificación de 45 eventos, `rain_event`, `wind_event`, `water_flow`, `mechanical_intrusion` y `aircraft_passage` **nunca se emitieron**. El contenido geofónico era real, visible y estaba correctamente medido: simplemente cayó a las reglas de transición y de respaldo.
 
-Los umbrales viven al inicio de `classifier.py` como constantes con nombre (`GEOPHONY_FLATNESS`, `ANTHROPHONY_CENTROID_HZ`, …) precisamente para poder recalibrarlos contra grabaciones de campo anotadas. **Mientras esa calibración no ocurra sobre datos reales de bosque seco tropical, trate `dominant_band` y los rasgos numéricos como la señal confiable, y `role` como una hipótesis.** Por la misma razón, el color del dominio es más confiable que la leyenda que lo acompaña.
+Los umbrales viven al inicio de `classifier.py` como constantes con nombre (`GEOPHONY_FLATNESS`, `ANTHROPHONY_CENTROID_HZ`, …) precisamente para poder recalibrarlos contra grabaciones de campo anotadas. **Mientras esa calibración no ocurra sobre datos reales de bosque seco tropical, trate `dominant_band` y los rasgos numéricos como la señal confiable, y `role` como una hipótesis.** Por la misma razón, el color del dominio es más confiable que el rol que el ticker imprime junto a él.
 
 Ver [docs/CALIBRACION.md](docs/CALIBRACION.md) para el protocolo completo.
 
@@ -491,7 +491,20 @@ Una ruta como primer argumento equivale a `detect`, así que `./detect_events.sh
       --min-confidence N      omitir clasificaciones por debajo de esto (0-1)
 
       --organize-by MODE      role | domain | flat
+      --clip-duration N       duración fija del clip en segundos, anclada al
+                              inicio del evento (60 con --clip-pre 30 da 30s
+                              antes y 30s después). 0 = dimensionar el clip
+                              según el evento usando pre/post-roll (por defecto)
+      --clip-pre N            segundos antes del inicio dentro de un clip fijo (30)
+      --min-separation N      segundos mínimos entre inicios recortados, para
+                              evitar ventanas casi duplicadas (la mitad de la
+                              duración del clip)
+
       --max-freq N            frecuencia superior del espectrograma (10000)
+      --min-freq N            piso del espectrograma en Hz (200)
+      --no-focus              graficar el rango completo en vez de encuadrar
+                              la banda propia del evento
+      --no-ticker             omitir el ticker de metadatos del borde inferior
       --no-video              omitir el renderizado MP4
       --no-poster             omitir PNG + miniatura
       --gif                   además, un GIF en bucle por clip
@@ -723,19 +736,19 @@ ecológica, y nada mapea todavía lo uno sobre lo otro.
 
 ### Lo que eso cuesta, en un solo cuadro
 
-Un cuerpo de agua a las 21:00, La Luna, estación AU-MAM-10. La leyenda dice
-`nocturnal voice [probable 65%]`. La columna, en el mismo cuadro, reporta:
+Un cuerpo de agua a las 21:00, La Luna, estación AU-MAM-10. La línea `VOX` dice
+`nocturnal voice [probable 65%]`. La línea `MEAS`, en el mismo cuadro, reporta:
 
 ```
-band       biophony high        entropy   0.951
-crest      1.4                  pulse     11.8 Hz
+MEAS biophony high 100% · crest 1.4 · entropy 0.951 · pulse 11.8 Hz
 ```
 
 Una entropía de 0.951 significa que la energía se reparte casi por igual en la
 banda; una cresta de 1.4 significa que no hay pico digno de ese nombre. Juntas
 dicen *ruido de banda ancha*. La regla devolvió aun así "probable" al 65 %,
 porque consultó solo la hora y la banda dominante: las dos mediciones que
-contradicen su premisa se calcularon, se imprimieron al lado y se ignoraron.
+contradicen su premisa se calcularon, se imprimieron una línea más abajo en el
+mismo cuadro y se ignoraron.
 
 Nada está roto aquí. La regla hizo lo que se escribió que hiciera y los rasgos
 midieron lo que se escribió que midieran. Simplemente nunca se encuentran.
@@ -921,7 +934,7 @@ bioacoustic_detector/
 
 - **Python 3.10 o superior.** macOS trae 3.9 como `/usr/bin/python3`; el lanzador busca un intérprete más nuevo y reconstruye su entorno virtual si encuentra uno más viejo. Instálelo con `brew install python@3.12` si hace falta.
 - **ffmpeg** — opcional, pero necesario para video de espectrograma, imágenes fijas y GIFs. Sin él igual se obtienen clips, `events.json`, exportaciones OSC, el calendario y los reportes; el pipeline lo dice y continúa. `brew install ffmpeg`.
-- **Un ffmpeg con `drawtext`**, si quiere leyendas incrustadas en los videos. El paquete estándar de Homebrew se compila sin libfreetype y por tanto no tiene el filtro `drawtext`, así que las leyendas quedan silenciosamente indisponibles — el espectrograma, la leyenda de ejes, los colores y el audio no se ven afectados. `brew install ffmpeg-full` lo provee; la herramienta prefiere esa compilación automáticamente, o defina `FFMPEG_BIN=/ruta/a/ffmpeg` para elegir la suya.
+- **Un ffmpeg con `drawtext`**, ahora más necesario que antes. El paquete estándar de Homebrew se compila sin libfreetype y por tanto no tiene el filtro `drawtext`, así que el texto queda silenciosamente indisponible. Como el toolkit dibuja ahora **todo** el texto del cuadro, incluido el eje de frecuencia, sin `drawtext` se pierden también los números de frecuencia — no solo el ticker. El espectrograma, los colores y el audio no se ven afectados. `brew install ffmpeg-full` lo provee; la herramienta prefiere esa compilación automáticamente, o defina `FFMPEG_BIN=/ruta/a/ffmpeg` para elegir la suya.
 - Paquetes de Python (instalados automáticamente en el entorno gestionado): `numpy`, `scipy`, `soundfile`, `metamoth`, `python-osc`.
 - **Opcional:** `alp-data` (Python 3.11+), solo para `./bioacoustics.sh validate`. Ningún otro módulo lo importa, y el comando indica cómo instalarlo si falta.
 
@@ -935,7 +948,7 @@ bioacoustic_detector/
 Instale un intérprete más nuevo (`brew install python@3.12`) y vuelva a ejecutar. El lanzador busca desde `python3.14` hasta `python3.10`, luego `python3`, y también revisa `/opt/homebrew/bin` y `/usr/local/bin` por si Homebrew no está en su `PATH`. No usará el 3.9 del sistema de macOS.
 
 **Los videos se renderizan pero no traen leyenda.**
-Su ffmpeg no tiene el filtro `drawtext`: se compiló sin libfreetype, que es el caso del paquete estándar actual de Homebrew. `./bioacoustics.sh doctor` muestra qué filtros trae su compilación. El rol, la confianza, la banda, la cobertura y la fecha del clip siguen estando en el nombre del archivo, en la tarjeta de la galería, en el reporte y en `events.json`; lo único que falta es el texto incrustado. Para obtenerlo:
+Su ffmpeg no tiene el filtro `drawtext`: se compiló sin libfreetype, que es el caso del paquete estándar actual de Homebrew. `./bioacoustics.sh doctor` muestra qué filtros trae su compilación. El rol, la confianza, la banda, la cobertura y la fecha del clip siguen estando en el nombre del archivo, en la tarjeta de la galería, en el reporte y en `events.json`; lo que falta es el texto incrustado, y con él el eje de frecuencia, que el toolkit también dibuja. Para obtenerlo:
 
 ```bash
 brew install ffmpeg-full     # keg-only; la herramienta lo encuentra y lo prefiere

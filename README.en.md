@@ -153,12 +153,12 @@ Every rendered clip encodes four independent channels of information. Nothing is
 
 | Channel | Carries | Set by |
 |---|---|---|
-| **Vertical axis** | frequency — which part of the spectrum the sound occupies | `--max-freq`, or Nyquist in ultrasonic mode |
+| **Vertical axis** | frequency, logarithmic — equal octaves get equal height, bracketed to the event's band | `--no-focus`, `--min-freq`, `--max-freq` |
 | **Horizontal axis** | time within the clip, scrolling right to left | clip length = event + pre/post-roll |
 | **Brightness** | energy in dBFS over a 72 dB range, log-scaled | `dynamic_range`, `gain_scale` |
 | **Hue** | the acoustic **domain** the classifier assigned | `domain_colors` in `config.py` |
 
-Text is white with a 1-pixel black outline and no filled box, so it stays legible over any colormap without hiding the spectrogram beneath it — and so that colour in the frame means exactly one thing: the acoustic domain.
+The frequency axis and the clock are white text with a 1-pixel black outline and no box, so they stay legible over any colormap without hiding the spectrogram. Only the ticker is backed: a black box at 66% that leaves the spectrogram faintly visible underneath, so it reads as part of the picture rather than a bar bolted on. That way colour in the frame means exactly one thing: the acoustic domain.
 
 ### The ticker separates measurement from inference
 
@@ -229,12 +229,12 @@ samples
   → adaptive threshold                 median + 2.5 × 1.4826 × MAD, 60 s causal window
   → event onset/offset                 contiguous frames above threshold, merged, filtered
   → per-event features                 band energies, centroid, flatness, duration, indices
-  → ecological ROLE                    rule-based, 16 categories        (the caption)
+  → ecological ROLE                    rule-based, 16 categories        (the VOX line)
   → acoustic DOMAIN                    role → {biophony, geophony, anthrophony, transition}
-  → COLORMAP                           domain → {green, cool, fiery, magma}
+  → COLORMAP                           domain → {plasma, cool, fiery, magma}
 ```
 
-The **role** is the finest judgement the system makes, and the label prints it with a confidence (`Dawn Chorus Participant (80%) | biophony mid`). The **domain** is the coarse, robust rollup — a rain event misfiled as wind is still geophony, still blue. Colour is therefore more trustworthy than the caption above it, which is exactly why colour carries the at-a-glance meaning and the caption carries the detail.
+The **role** is the finest judgement the system makes, and the ticker's `VOX` line prints it with its certainty (`dawn chorus participant [probable 80%]`). The **domain** is the coarse, robust rollup — a rain event misfiled as wind is still geophony, still blue. Colour is therefore more trustworthy than the text beside it, which is exactly why colour carries the at-a-glance meaning and the ticker carries the detail.
 
 ### Two worked examples
 
@@ -242,7 +242,7 @@ These are real frames from the verification corpus, and each one is internally c
 
 **A dawn chorus participant, rendered green.**
 
-Two chirps sweep 4.7 → 6.7 kHz against near-silence. The energy sits squarely in `biophony_mid` (4–8 kHz, the passerine band); the recording timestamp is 05:30, inside the 04:00–07:00 dawn window; the sweeps are tonal, so flatness is low. Rules fire in that order and produce `dawn_chorus_participant` at 0.80 confidence, domain biophony, colormap green. The caption reads `Dawn Chorus Participant (80%) | biophony mid`, and `NDSI +1.00` confirms it: essentially all energy is in the 2–8 kHz biophonic band and none in the 1–2 kHz anthropogenic one.
+Two chirps sweep 4.7 → 6.7 kHz against near-silence. The energy sits squarely in `biophony_mid` (4–8 kHz, the passerine band); the recording timestamp is 05:30, inside the 04:00–07:00 dawn window; the sweeps are tonal, so flatness is low. Rules fire in that order and produce `dawn_chorus_participant` at 0.80 confidence, domain biophony. The `VOX` line reads `dawn chorus participant [probable 80%]`, and `NDSI +1.00` confirms it: essentially all energy is in the 2–8 kHz biophonic band and none in the 1–2 kHz anthropogenic one.
 
 **A rain shower, rendered magma — and why it is not labelled `rain_event`.**
 
@@ -260,7 +260,7 @@ The second point is a calibration gap worth knowing before trusting labels in bu
 
 In the 45-event verification corpus, `rain_event`, `wind_event`, `water_flow`, `mechanical_intrusion` and `aircraft_passage` were therefore **never emitted**. Geophonic content was real, visible and correctly measured — it simply fell through to the transition and fallback rules.
 
-The thresholds live at the top of `classifier.py` as named constants (`GEOPHONY_FLATNESS`, `ANTHROPHONY_CENTROID_HZ`, …) precisely so they can be recalibrated against annotated field recordings. **Until that calibration happens on real tropical dry forest data, treat `dominant_band` and the numeric features as the trustworthy signal and `role` as a hypothesis.** For the same reason, domain colour is more reliable than the caption above it.
+The thresholds live at the top of `classifier.py` as named constants (`GEOPHONY_FLATNESS`, `ANTHROPHONY_CENTROID_HZ`, …) precisely so they can be recalibrated against annotated field recordings. **Until that calibration happens on real tropical dry forest data, treat `dominant_band` and the numeric features as the trustworthy signal and `role` as a hypothesis.** For the same reason, domain colour is more reliable than the role the ticker prints beside it.
 
 ---
 
@@ -489,7 +489,19 @@ A path as the first argument means `detect`, so `./detect_events.sh rec.WAV --th
       --min-confidence N      skip classifications below this (0-1)
 
       --organize-by MODE      role | domain | flat
+      --clip-duration N       fixed clip length in seconds, anchored on the
+                              event onset (60 with --clip-pre 30 gives 30s
+                              before and 30s after). 0 = size the clip to the
+                              event using pre/post-roll (default)
+      --clip-pre N            seconds before the onset inside a fixed clip (30)
+      --min-separation N      minimum seconds between clipped onsets, to avoid
+                              near-duplicate windows (half the clip length)
+
       --max-freq N            top frequency in spectrogram renders (10000)
+      --min-freq N            bottom of the spectrogram in Hz (200)
+      --no-focus              plot the full frequency range instead of
+                              bracketing the event's own band
+      --no-ticker             omit the metadata ticker along the bottom
       --no-video              skip MP4 rendering
       --no-poster             skip PNG + thumbnail
       --gif                   also render a looping GIF per clip
@@ -719,19 +731,19 @@ ecological category, and nothing yet maps one onto the other.
 
 ### What that costs, in one frame
 
-A pond at 21:00, La Luna, station AU-MAM-10. The caption reads
-`nocturnal voice [probable 65%]`. The column, on the same frame, reports:
+A pond at 21:00, La Luna, station AU-MAM-10. The `VOX` line reads
+`nocturnal voice [probable 65%]`. The `MEAS` line, on the same frame, reports:
 
 ```
-band       biophony high        entropy   0.951
-crest      1.4                  pulse     11.8 Hz
+MEAS biophony high 100% · crest 1.4 · entropy 0.951 · pulse 11.8 Hz
 ```
 
 An entropy of 0.951 means the energy is spread almost evenly across the band;
 a crest of 1.4 means there is no peak worth the name. Together they say
 *broadband noise*. The rule nevertheless returned "probable" at 65 %, because
 it consulted only the hour and the dominant band — the two measurements that
-contradict its premise were computed, printed beside it, and ignored.
+contradict its premise were computed, printed one line below it on the same
+frame, and ignored.
 
 Nothing here is broken. The rule did what it was written to do and the
 features measured what they were written to measure. They simply never meet.
@@ -913,7 +925,7 @@ bioacoustic_detector/
 
 - **Python 3.10 or newer.** macOS ships 3.9 as `/usr/bin/python3`; the launcher searches for a newer interpreter and rebuilds its virtualenv if it finds an older one. Install with `brew install python@3.12` if needed.
 - **ffmpeg** — optional but needed for spectrogram video, stills and GIFs. Without it you still get clips, `events.json`, OSC exports, the calendar and the reports; the pipeline says so and carries on. `brew install ffmpeg`.
-- **A drawtext-capable ffmpeg**, if you want captions burned into the clip videos. Homebrew's stock `ffmpeg` bottle is built without libfreetype and therefore has no `drawtext` filter, so labels are silently unavailable — spectrogram, legend, colours and audio are unaffected. `brew install ffmpeg-full` provides it; the toolkit prefers that build automatically, or set `FFMPEG_BIN=/path/to/ffmpeg` to choose your own.
+- **A drawtext-capable ffmpeg**, more necessary than it used to be. Homebrew's stock `ffmpeg` bottle is built without libfreetype and therefore has no `drawtext` filter, so text is silently unavailable. Since the toolkit now draws **all** the text on the frame, the frequency axis included, without `drawtext` you lose the frequency numbers too — not just the ticker. Spectrogram, colours and audio are unaffected. `brew install ffmpeg-full` provides it; the toolkit prefers that build automatically, or set `FFMPEG_BIN=/path/to/ffmpeg` to choose your own.
 - Python packages (installed automatically into the managed venv): `numpy`, `scipy`, `soundfile`, `metamoth`, `python-osc`.
 - **Optional:** `alp-data` (Python 3.11+), only for `./bioacoustics.sh validate`. Nothing else imports it, and the command tells you how to install it if missing.
 
@@ -927,7 +939,7 @@ bioacoustic_detector/
 Install a newer interpreter (`brew install python@3.12`) and run again. The launcher searches `python3.14` down to `python3.10`, then `python3`, and also looks inside `/opt/homebrew/bin` and `/usr/local/bin` in case Homebrew is not on your `PATH`. It will not use macOS's system 3.9.
 
 **Videos render but carry no caption.**
-Your ffmpeg has no `drawtext` filter — it was built without libfreetype, which is the case for Homebrew's current stock bottle. `./bioacoustics.sh doctor` shows which filters your build has. The clip's role, confidence, band, habitat and date are still in the filename, the gallery card, the report and `events.json`; only the burned-in text is missing. To get it:
+Your ffmpeg has no `drawtext` filter — it was built without libfreetype, which is the case for Homebrew's current stock bottle. `./bioacoustics.sh doctor` shows which filters your build has. The clip's role, confidence, band, habitat and date are still in the filename, the gallery card, the report and `events.json`; what's missing is the burned-in text, and with it the frequency axis, which the toolkit now also draws. To get it:
 
 ```bash
 brew install ffmpeg-full     # keg-only; the toolkit finds and prefers it
